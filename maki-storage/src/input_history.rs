@@ -3,13 +3,14 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use crate::paths::project_dir;
-use crate::{StateDir, StorageError, atomic_write};
+use crate::sqlite::Database;
+use crate::{StateDir, StorageError};
 
-const HISTORY_FILE: &str = "input_history.json";
+const HISTORY_DB: &str = "input_history.db";
 pub const MAX_ENTRIES: usize = 100;
 
 fn history_path(dir: &StateDir, cwd: &Path) -> PathBuf {
-    project_dir(dir, cwd).join(HISTORY_FILE)
+    project_dir(dir, cwd).join(HISTORY_DB)
 }
 
 #[derive(Debug)]
@@ -40,12 +41,21 @@ impl InputHistory {
             max_entries,
             file: Some(file),
         };
-        let Some(data) = history.file.as_ref().and_then(|p| fs::read(p).ok()) else {
+        let Some(path) = history.file.as_ref() else {
             return history;
         };
-        let items: Vec<String> = serde_json::from_slice(&data).unwrap_or_default();
-        for entry in items {
-            history.push_inner(entry);
+        let Ok(db) = Database::open(path) else {
+            return history;
+        };
+        let _ = db.execute(
+            "CREATE TABLE IF NOT EXISTS entries (seq INTEGER PRIMARY KEY AUTOINCREMENT, value TEXT NOT NULL)",
+            &[],
+        );
+        if let Ok(mut stmt) = db.connection().prepare("SELECT value FROM entries ORDER BY seq")
+            && let Ok(rows) = stmt.query_map([], |row| row.get::<_, String>(0)) {
+            for value in rows.flatten() {
+                history.push_inner(value);
+            }
         }
         history
     }
@@ -59,7 +69,19 @@ impl InputHistory {
         if let Some(parent) = file.parent() {
             fs::create_dir_all(parent)?;
         }
-        atomic_write(file, &serde_json::to_vec(&self.entries)?)
+        let mut db = Database::open(file)?;
+        db.execute(
+            "CREATE TABLE IF NOT EXISTS entries (seq INTEGER PRIMARY KEY AUTOINCREMENT, value TEXT NOT NULL)",
+            &[],
+        )?;
+        let conn = db.connection_mut();
+        let tx = conn.transaction()?;
+        tx.execute("DELETE FROM entries", [])?;
+        for entry in &self.entries {
+            tx.execute("INSERT INTO entries (value) VALUES (?1)", rusqlite::params![entry])?;
+        }
+        tx.commit()?;
+        Ok(())
     }
 
     pub fn push(&mut self, entry: String) {
@@ -249,5 +271,16 @@ mod tests {
         }
         let history = InputHistory::load(&dir, &cwd, MAX_ENTRIES);
         assert!(history.is_empty());
+    }
+
+    #[test]
+    fn storage_uses_wal_mode() {
+        let (tmp, dir) = tmp_dir();
+        let cwd = project(&tmp, "one");
+        let mut history = InputHistory::load(&dir, &cwd, MAX_ENTRIES);
+        history.push("a".into());
+        history.save().unwrap();
+        let db = Database::open(&history_path(&dir, &cwd)).unwrap();
+        assert_eq!(db.journal_mode().unwrap().to_lowercase(), "wal");
     }
 }

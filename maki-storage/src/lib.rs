@@ -13,6 +13,12 @@ pub mod model;
 pub mod paths;
 pub mod plans;
 pub mod sessions;
+pub mod sqlite;
+pub use sqlite as db;
+pub use sqlite::Database;
+pub use sqlite::Database as SqliteDatabase;
+pub use sqlite::Database as SqliteDb;
+pub use sqlite::Database as Db;
 pub mod stdin;
 pub mod theme;
 pub mod trusted_folders;
@@ -74,6 +80,8 @@ pub enum StorageError {
     NotFound(String),
     #[error("slug collision after max attempts")]
     SlugCollision,
+    #[error(transparent)]
+    Sqlite(#[from] rusqlite::Error),
 }
 
 pub fn atomic_write(path: &Path, data: &[u8]) -> Result<(), StorageError> {
