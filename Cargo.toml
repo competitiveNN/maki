@@ -114,6 +114,7 @@ ignore = "0.4"
 strum = { version = "0.28", features = ["derive"] }
 htmd = "0.5"
 tempfile = "3"
+rusqlite = { version = "0.41", features = ["bundled"] }
 regex = { version = "1", default-features = false, features = ["std", "perf", "unicode-perl"] }
 globset = "0.4"
 grep-regex = "0.1"
