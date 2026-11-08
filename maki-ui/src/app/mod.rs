@@ -64,6 +64,7 @@ use crate::text_buffer::{RuleSet, TextBuffer, Writers, normalize_line_endings, s
 use arc_swap::ArcSwapOption;
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers, MouseEvent};
 use maki_agent::permissions::{PermissionManager, TaggedAnswer};
+use maki_agent::live_session::{set_computer_in_use};
 use maki_agent::{
     AgentEvent, Envelope, McpConfigErrors, McpSnapshotReader, SessionMailbox, SharedBuf,
     SharedMessages, ToolPart,
@@ -558,6 +559,9 @@ pub struct App {
     /// Background tasks running in the other open sessions, which a quit
     /// ends too. Only the event loop sees every session, so it keeps this.
     pub(crate) background_elsewhere: usize,
+    /// Whether the computer is currently "in use" by the user. When false,
+    /// workers can run more intensive tasks. Toggled by a global hotkey.
+    pub(crate) computer_in_use: bool,
     pub(super) background_moves: BackgroundMoves,
     /// Final results of moved calls whose receipt has not landed yet. The two
     /// travel on different channels, and the receipt opens the tab.
@@ -704,6 +708,7 @@ impl App {
             quit_copied: false,
             last_quit: None,
             background_elsewhere: 0,
+            computer_in_use: true,
             background_moves: BackgroundMoves::default(),
             early_finals: HashMap::new(),
             tool_parts: HashMap::new(),
@@ -1804,6 +1809,13 @@ impl App {
                 true
             }),
             BuiltinAction::Background => self.move_to_background(None),
+            BuiltinAction::ToggleComputerInUse => {
+                self.computer_in_use = !self.computer_in_use;
+                set_computer_in_use(self.computer_in_use);
+                let state = if self.computer_in_use { "in use" } else { "not in use" };
+                self.flash(format!("Computer is now {}", state));
+                true
+            }
         };
         (handled, vec![])
     }

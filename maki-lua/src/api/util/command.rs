@@ -733,6 +733,9 @@ pub enum BuiltinAction {
     Newline,
     /// Moves the main chat's movable running calls to the background.
     Background,
+    /// Toggles the "computer in use" state. When false, workers can run
+    /// more intensive tasks.
+    ToggleComputerInUse,
 }
 
 impl BuiltinAction {
@@ -771,6 +774,7 @@ impl BuiltinAction {
             // Each moved call's result wakes the chat and costs a turn, the
             // price of `notify{ wake = true }`.
             Self::Background => &[Permission::Agent],
+            Self::ToggleComputerInUse => &[],
         }
     }
 }

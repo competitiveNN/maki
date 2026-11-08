@@ -286,12 +286,19 @@ impl App {
                 .then(|| self.plan_form.hint_line())
                 .flatten()
                 .or_else(|| self.lua_hint_line());
+            // Show focused session title in the input box top border when no other hint
+            let session_title_hint = (!self.state.session.title.is_empty())
+                .then(|| Line::from(Span::styled(
+                    format!(" {}", self.state.session.title),
+                    theme::current().input_placeholder,
+                )));
+            let top_right_hint = panel_hint.or(session_title_hint);
             let caret = self.input_box.view(
                 frame,
                 layout.input_area,
                 placeholder,
                 self.separator_style(),
-                panel_hint,
+                top_right_hint,
             );
             self.command_palette
                 .view(frame, layout.input_area, &self.input_box.buffer);

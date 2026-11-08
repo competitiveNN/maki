@@ -3,6 +3,7 @@ use std::path::PathBuf;
 use maki_lua_macro::{lua_fn, lua_table};
 use mlua::Lua;
 
+
 use crate::plugin_permissions::PluginPermissions;
 
 fn utf8(p: PathBuf) -> Option<String> {
@@ -51,6 +52,17 @@ fn legacy_dir(_lua: &Lua) -> mlua::Result<Option<String>> {
     Ok(maki_storage::paths::legacy_home_dir().and_then(utf8))
 }
 
+/// Returns whether the computer is currently "in use" by the user.
+/// When false, workers can run more intensive tasks.
+///
+/// @return (boolean) True if the computer is in use, false otherwise.
+/// @example
+/// local in_use = maki.env.computer_in_use()
+#[lua_fn]
+fn computer_in_use(_lua: &Lua) -> mlua::Result<bool> {
+    Ok(maki_agent::live_session::computer_in_use())
+}
+
 lua_table! {
     /// Paths to maki's own directories (config, state, logs, legacy).
     ///
@@ -65,6 +77,6 @@ lua_table! {
     /// local cfg = maki.env.config_dir()
     /// ```
     "maki.env" => pub(crate) fn create_env_table(perms: &PluginPermissions), DOCS [
-        state_dir(perms), config_dir(perms), logs_dir(perms), legacy_dir(perms),
+        state_dir(perms), config_dir(perms), logs_dir(perms), legacy_dir(perms), computer_in_use(),
     ]
 }
