@@ -42,6 +42,7 @@ url = { workspace = true }
 regex = { workspace = true }
 include_dir = { workspace = true }
 maki-storage = { workspace = true }
+rusqlite = { workspace = true }
 reqwest = { workspace = true, features = ["socks", "gzip", "deflate"] }
 socket2 = { workspace = true }
 htmd = { workspace = true }
