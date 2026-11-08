@@ -3,6 +3,7 @@ pub(crate) mod agent;
 pub(crate) mod r#async;
 pub(crate) mod autocmd;
 pub(crate) mod base64;
+pub(crate) mod db;
 pub(crate) mod env;
 pub(crate) mod r#fn;
 pub(crate) mod fs;
@@ -98,6 +99,7 @@ pub(crate) fn create_maki_global(
     maki.set("json", json::create_json_table(lua)?)?;
     maki.set("yaml", yaml::create_yaml_table(lua)?)?;
     maki.set("version", version::create_version_table(lua)?)?;
+    maki.set("db", db::create_db_table(lua, permissions)?)?;
     warn_invalid_net_hosts(&plugin, reach.egress().declared());
     // One egress value shared by the two namespaces that can open a socket, so
     // a provider registered through `maki.provider` is reachable from

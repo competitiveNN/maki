@@ -3820,6 +3820,7 @@ dependencies = [
  "pin-project-lite",
  "regex",
  "reqwest",
+ "rusqlite",
  "rustix 1.1.6",
  "semver",
  "serde",
