@@ -555,11 +555,7 @@ maki.api.create_autocmd("SessionStatusChanged", {
     local prev = last_status[d.session_id]
     last_status[d.session_id] = d.status
     if not d.focused then
-      if d.status == "needs_input" then
-        maki.ui.flash("◆ " .. d.title .. " needs input · /sessions")
-      elseif d.status == "idle" and prev == "working" then
-        maki.ui.flash("✓ " .. d.title .. " finished · /sessions")
-      end
+      -- Session title is now shown in the input box top border, no flash needed
     end
     if board then
       board.dirty = true

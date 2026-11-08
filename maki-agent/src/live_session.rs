@@ -1,5 +1,6 @@
 use std::collections::{HashMap, VecDeque};
 use std::sync::{Arc, LazyLock, Mutex, MutexGuard, PoisonError, Weak};
+use std::sync::atomic::{AtomicBool, Ordering};
 
 use arc_swap::ArcSwap;
 use maki_config::ModelPolicy;
@@ -41,6 +42,20 @@ static LIVE_TASKS: LazyLock<Mutex<HashMap<String, TaskEntry>>> =
 struct TaskEntry {
     parent: MakiId,
     mailbox: SessionMailbox,
+}
+
+/// Global state for whether the computer is "in use" by the user.
+/// When false, workers can run more intensive tasks.
+static COMPUTER_IN_USE: LazyLock<AtomicBool> = LazyLock::new(|| AtomicBool::new(true));
+
+/// Returns whether the computer is currently in use.
+pub fn computer_in_use() -> bool {
+    COMPUTER_IN_USE.load(Ordering::Relaxed)
+}
+
+/// Sets the computer in use state.
+pub fn set_computer_in_use(in_use: bool) {
+    COMPUTER_IN_USE.store(in_use, Ordering::Relaxed);
 }
 
 /// Every frontend registers the mailbox, but only an interactive agent loop
