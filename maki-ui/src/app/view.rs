@@ -292,7 +292,22 @@ impl App {
                     format!(" {}", self.state.session.title),
                     theme::current().input_placeholder,
                 )));
-            let top_right_hint = panel_hint.or(session_title_hint);
+            // Show computer in use indicator (global, not session-specific)
+            let computer_indicator = if self.computer_in_use { "🖥️" } else { "💤" };
+            let indicator_spans = vec![Span::styled(
+                format!(" {} ", computer_indicator),
+                theme::current().input_placeholder,
+            )];
+            let top_right_hint = panel_hint.or_else(|| {
+                if let Some(title) = session_title_hint {
+                    // Combine indicator with session title
+                    let mut spans = indicator_spans.clone();
+                    spans.extend(title.spans);
+                    Some(Line::from(spans))
+                } else {
+                    Some(Line::from(indicator_spans))
+                }
+            });
             let caret = self.input_box.view(
                 frame,
                 layout.input_area,
