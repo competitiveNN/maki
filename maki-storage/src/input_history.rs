@@ -3,7 +3,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use crate::paths::project_dir;
-use crate::sqlite::Database;
+use crate::sqlite::get_pool;
 use crate::{StateDir, StorageError};
 
 const HISTORY_DB: &str = "input_history.db";
@@ -44,16 +44,23 @@ impl InputHistory {
         let Some(path) = history.file.as_ref() else {
             return history;
         };
-        let Ok(db) = Database::open(path) else {
+        let Ok(pool) = get_pool(path) else {
             return history;
         };
-        let _ = db.execute(
-            "CREATE TABLE IF NOT EXISTS entries (seq INTEGER PRIMARY KEY AUTOINCREMENT, value TEXT NOT NULL)",
-            &[],
-        );
-        if let Ok(mut stmt) = db.connection().prepare("SELECT value FROM entries ORDER BY seq")
-            && let Ok(rows) = stmt.query_map([], |row| row.get::<_, String>(0)) {
-            for value in rows.flatten() {
+        let _ = pool.with_conn(|db| {
+            let _ = db.execute(
+                "CREATE TABLE IF NOT EXISTS entries (seq INTEGER PRIMARY KEY AUTOINCREMENT, value TEXT NOT NULL)",
+                &[],
+            );
+            Ok(())
+        });
+        if let Ok(rows) = pool.with_read(|db| {
+            let mut stmt = db.prepare("SELECT value FROM entries ORDER BY seq")?;
+            let rows: Vec<String> = stmt.query_map([], |row| row.get::<_, String>(0))?
+                .collect::<Result<Vec<_>, _>>()?;
+            Ok(rows)
+        }) {
+            for value in rows {
                 history.push_inner(value);
             }
         }
@@ -69,19 +76,21 @@ impl InputHistory {
         if let Some(parent) = file.parent() {
             fs::create_dir_all(parent)?;
         }
-        let mut db = Database::open(file)?;
-        db.execute(
-            "CREATE TABLE IF NOT EXISTS entries (seq INTEGER PRIMARY KEY AUTOINCREMENT, value TEXT NOT NULL)",
-            &[],
-        )?;
-        let conn = db.connection_mut();
-        let tx = conn.transaction()?;
-        tx.execute("DELETE FROM entries", [])?;
-        for entry in &self.entries {
-            tx.execute("INSERT INTO entries (value) VALUES (?1)", rusqlite::params![entry])?;
-        }
-        tx.commit()?;
-        Ok(())
+        let pool = get_pool(file)?;
+        pool.with_conn(|db| {
+            db.execute(
+                "CREATE TABLE IF NOT EXISTS entries (seq INTEGER PRIMARY KEY AUTOINCREMENT, value TEXT NOT NULL)",
+                &[],
+            )?;
+            let conn = db.connection_mut();
+            let tx = conn.transaction()?;
+            tx.execute("DELETE FROM entries", [])?;
+            for entry in &self.entries {
+                tx.execute("INSERT INTO entries (value) VALUES (?1)", rusqlite::params![entry])?;
+            }
+            tx.commit()?;
+            Ok(())
+        })
     }
 
     pub fn push(&mut self, entry: String) {
@@ -280,7 +289,9 @@ mod tests {
         let mut history = InputHistory::load(&dir, &cwd, MAX_ENTRIES);
         history.push("a".into());
         history.save().unwrap();
-        let db = Database::open(&history_path(&dir, &cwd)).unwrap();
-        assert_eq!(db.journal_mode().unwrap().to_lowercase(), "wal");
+        let pool = get_pool(&history_path(&dir, &cwd)).unwrap();
+        let mode = pool.with_read(|d| d.journal_mode()).unwrap();
+        assert_eq!(mode.to_lowercase(), "wal");
+
     }
 }

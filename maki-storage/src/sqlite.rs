@@ -27,7 +27,7 @@ impl Database {
             "PRAGMA journal_mode = WAL; \
              PRAGMA synchronous = NORMAL; \
              PRAGMA foreign_keys = ON; \
-             PRAGMA cache_size = -8192; \
+             PRAGMA cache_size = -2048; \
              PRAGMA temp_store = memory;",
         )?;
         debug!(path = %path.display(), "opened sqlite database in WAL mode");
