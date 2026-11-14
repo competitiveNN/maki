@@ -286,27 +286,17 @@ impl App {
                 .then(|| self.plan_form.hint_line())
                 .flatten()
                 .or_else(|| self.lua_hint_line());
-            // Show focused session title in the input box top border when no other hint
-            let session_title_hint = (!self.state.session.title.is_empty())
-                .then(|| Line::from(Span::styled(
-                    format!(" {}", self.state.session.title),
-                    theme::current().input_placeholder,
-                )));
-            // Show computer in use indicator (global, not session-specific)
-            let computer_indicator = if self.computer_in_use { "🖥️" } else { "💤" };
-            let indicator_spans = vec![Span::styled(
-                format!(" {} ", computer_indicator),
-                theme::current().input_placeholder,
-            )];
+            // Build the top-right border hint from a single snapshot so the
+            // indicator and session title are composed consistently for this frame.
             let top_right_hint = panel_hint.or_else(|| {
-                if let Some(title) = session_title_hint {
-                    // Combine indicator with session title
-                    let mut spans = indicator_spans.clone();
-                    spans.extend(title.spans);
-                    Some(Line::from(spans))
-                } else {
-                    Some(Line::from(indicator_spans))
+                let (in_use, title) = (self.computer_in_use, self.state.session.title.as_str());
+                let indicator = if in_use { "🖥️" } else { "💤" };
+                let style = theme::current().input_placeholder;
+                let mut spans = vec![Span::styled(format!(" {indicator} "), style)];
+                if !title.is_empty() {
+                    spans.push(Span::styled(format!("{title} "), style));
                 }
+                Some(Line::from(spans))
             });
             let caret = self.input_box.view(
                 frame,
