@@ -18,7 +18,7 @@ use ratatui::Frame;
 use ratatui::layout::{Constraint, Layout, Position, Rect};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::Paragraph;
-use unicode_width::{UnicodeWidthChar, UnicodeWidthStr};
+use unicode_width::UnicodeWidthStr;
 
 const NO_MATCHES: &str = "No matches";
 const ERROR_LABEL: &str = "Error: ";
@@ -698,19 +698,13 @@ fn truncate_label(label: &str, max_width: usize) -> String {
     if label.width() <= max_width {
         return label.to_string();
     }
-    let target = max_width.saturating_sub(1);
-    let mut width = 0;
-    let mut result = String::with_capacity(label.len());
-    for ch in label.chars() {
-        let cw = ch.width().unwrap_or(0);
-        if width + cw > target {
-            break;
-        }
-        width += cw;
-        result.push(ch);
+    if max_width == 0 {
+        return String::new();
     }
-    result.push('\u{2026}');
-    result
+    // Reserve one cell for the ellipsis and cut on a grapheme boundary, so a
+    // ZWJ sequence, variation selector, or combining mark is never split.
+    let (head, _) = crate::truncate::head_fitting(label, max_width.saturating_sub(1));
+    format!("{head}\u{2026}")
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -1213,6 +1207,74 @@ mod tests {
     #[test_case("ab\u{4e16}\u{754c}cde", 6 => "ab\u{4e16}\u{2026}" ; "wide_chars_truncated")]
     fn truncate_label_cases(label: &str, max_width: usize) -> String {
         truncate_label(label, max_width)
+    }
+
+    #[test]
+    fn truncate_label_never_splits_a_zwj_cluster() {
+        let family = "\u{1f468}\u{200d}\u{1f469}\u{200d}\u{1f467}";
+        let label = format!("x{family}y");
+        let out = truncate_label(&label, 2);
+        assert!(out.width() <= 2, "over budget: {out:?}");
+        assert!(!out.contains('\u{fffd}'));
+        // A ZWJ only survives inside the whole cluster.
+        assert!(
+            !out.contains('\u{200d}') || out.contains(family),
+            "split: {out:?}"
+        );
+    }
+
+    #[test]
+    fn truncate_label_never_orphans_a_variation_selector() {
+        let warn = "warn \u{26a0}\u{fe0f}";
+        for max in 0..=warn.width() + 1 {
+            let out = truncate_label(warn, max);
+            assert!(out.width() <= max, "{out:?} over {max}");
+            assert!(!out.contains('\u{fffd}'));
+            assert!(
+                !out.ends_with('\u{fe0f}') || out.ends_with("\u{26a0}\u{fe0f}"),
+                "orphaned VS16: {out:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn truncate_label_never_starts_on_a_combining_mark() {
+        let text = "e\u{0301}clair";
+        for max in 0..=text.width() + 1 {
+            let out = truncate_label(text, max);
+            assert!(out.width() <= max, "{out:?} over {max}");
+            assert!(!out.starts_with('\u{0301}'), "orphaned mark: {out:?}");
+            assert!(!out.contains('\u{fffd}'));
+        }
+    }
+
+    /// Every cut on random Unicode stays within budget, valid UTF-8, and a
+    /// grapheme-aligned prefix of the label.
+    #[test]
+    fn randomized_unicode_labels_stay_within_budget() {
+        let mut rng = fastrand::Rng::with_seed(0x1abe1);
+        let pools: &[&[char]] = &[
+            &['a', 'b', ' ', '-', '_'],
+            &['\u{65e5}', '\u{672c}', '\u{8a9e}'],
+            &['\u{1f600}', '\u{1f5a5}'],
+            &['\u{200d}', '\u{fe0f}', '\u{0301}'],
+        ];
+        for _ in 0..300 {
+            let len = rng.usize(0..18);
+            let text: String = (0..len)
+                .map(|_| {
+                    let pool = pools[rng.usize(0..pools.len())];
+                    pool[rng.usize(0..pool.len())]
+                })
+                .collect();
+            for max in 0..=20 {
+                let out = truncate_label(&text, max);
+                assert!(out.width() <= max, "{out:?} over {max}");
+                assert!(!out.contains('\u{fffd}'));
+                let head = out.strip_suffix('\u{2026}').unwrap_or(&out);
+                assert!(text.starts_with(head), "{head:?} not a prefix of {text:?}");
+            }
+        }
     }
 
     #[test]
