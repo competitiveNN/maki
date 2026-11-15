@@ -1449,6 +1449,47 @@ mod tests {
         assert_eq!(spans, NFD_HIGHLIGHT_SPANS);
     }
 
+    /// Every cut on random Unicode stays within the row width, valid, and a
+    /// grapheme-aligned prefix of the label (the indent span is skipped).
+    #[test]
+    fn randomized_highlighted_lines_stay_within_budget() {
+        let t = theme::current();
+        let mut rng = fastrand::Rng::with_seed(0x1117);
+        let pools: &[&[char]] = &[
+            &['a', 'b', ' ', '-', '_', '/', '.'],
+            &['\u{65e5}', '\u{672c}', '\u{8a9e}'],
+            &['\u{1f600}', '\u{1f5a5}'],
+            &['\u{200d}', '\u{fe0f}', '\u{0301}'],
+        ];
+        for _ in 0..300 {
+            let len = rng.usize(0..20);
+            let text: String = (0..len)
+                .map(|_| {
+                    let pool = pools[rng.usize(0..pools.len())];
+                    pool[rng.usize(0..pool.len())]
+                })
+                .collect();
+            let units = text.graphemes(true).count();
+            let indices: Vec<u32> = (0..units)
+                .filter(|_| rng.bool())
+                .map(|i| i as u32)
+                .collect();
+            for max in 1..=16 {
+                let line = build_highlighted_line(&text, &indices, max, false, &t);
+                let joined: String = line
+                    .spans
+                    .iter()
+                    .skip(1)
+                    .map(|s| s.content.as_ref())
+                    .collect();
+                let width = unicode_width::UnicodeWidthStr::width(joined.as_str());
+                assert!(width <= max, "{joined:?} over {max}");
+                assert!(!joined.contains('\u{fffd}'));
+                assert!(text.starts_with(&joined), "{joined:?} is not a prefix");
+            }
+        }
+    }
+
     #[test_case(0, -10, 0 ; "clamps_at_start")]
     #[test_case(4, 10, 4 ; "clamps_at_end")]
     #[test_case(2, 1, 3 ; "moves_down")]
