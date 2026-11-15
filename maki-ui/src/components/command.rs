@@ -828,6 +828,38 @@ mod tests {
         p
     }
 
+    /// The highlight splitter only slices the run into styled spans; whatever
+    /// indices the matcher hands it, every char must survive exactly once.
+    #[test]
+    fn highlighted_spans_preserve_every_char() {
+        let base = Style::default();
+        let highlight = Style::default();
+        let mut rng = fastrand::Rng::with_seed(0x0c0d);
+        let pools: &[&[char]] = &[
+            &['a', 'b', ' ', '-', '_', '/', ':'],
+            &['\u{65e5}', '\u{672c}', '\u{8a9e}'],
+            &['\u{1f600}', '\u{1f5a5}'],
+            &['\u{200d}', '\u{fe0f}', '\u{0301}'],
+        ];
+        for _ in 0..300 {
+            let len = rng.usize(0..20);
+            let text: String = (0..len)
+                .map(|_| {
+                    let pool = pools[rng.usize(0..pools.len())];
+                    pool[rng.usize(0..pool.len())]
+                })
+                .collect();
+            let chars = text.chars().count();
+            let indices: Vec<u32> = (0..chars)
+                .filter(|_| rng.bool())
+                .map(|i| i as u32)
+                .collect();
+            let spans = highlighted_spans(&text, &indices, base, highlight);
+            let joined: String = spans.iter().map(|s| s.content.as_ref()).collect();
+            assert_eq!(joined, text, "indices {indices:?} changed the text");
+        }
+    }
+
     fn sample_custom() -> Arc<[CustomCommand]> {
         Arc::from([
             CustomCommand {
