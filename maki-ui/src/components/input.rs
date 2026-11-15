@@ -2416,6 +2416,13 @@ mod tests {
         assert!(colored_whole(&mut input));
     }
 
+    /// Collects the rendered symbols of the top border row into a string.
+    fn top_border_row(buf: &ratatui::buffer::Buffer) -> String {
+        (0..buf.area.width)
+            .map(|x| buf.cell((x, 0)).map(|c| c.symbol()).unwrap_or(""))
+            .collect()
+    }
+
     /// Regression test: top-right hint with multi-byte/emoji title renders
     /// without garbling in a narrow input box.
     #[test]
@@ -2426,7 +2433,8 @@ mod tests {
         let height = 3_u16;
         let backend = ratatui::backend::TestBackend::new(width, height);
         let mut terminal = ratatui::Terminal::new(backend).unwrap();
-        // Title with multi-byte chars and emoji (wide characters)
+        // Title with multi-byte chars and emoji (wide characters). It is wider
+        // than the box, so this exercises clipping of a partially visible title.
         let hint = Line::from(vec![
             Span::styled(" \u{1f5a5} ", theme::current().input_placeholder),
             Span::styled(
@@ -2440,12 +2448,16 @@ mod tests {
                 let _ = input.view(frame, area, Placeholder::Blank, border_style, Some(hint));
             })
             .unwrap();
-        // Verify the top border was rendered (no panic)
         let buf = terminal.backend().buffer();
-        assert!(buf.area.width == width);
+        let row = top_border_row(buf);
+        // The visible portion is clipped from the left, but the characters that
+        // do land must be the originals, never a replacement glyph.
+        assert!(!row.contains('\u{fffd}'), "garbled cell in {row:?}");
+        assert!(row.contains('\u{1f600}'), "emoji missing from {row:?}");
     }
 
-    /// Regression test: repeated frames with the same title don't garble.
+    /// Regression test: repeated frames with the same title don't garble and
+    /// produce byte-identical border rows.
     #[test]
     fn top_right_hint_repeated_frames() {
         let mut input = InputBox::new(InputHistory::default(), 20);
@@ -2453,6 +2465,7 @@ mod tests {
         let width = 30_u16;
         let height = 3_u16;
         let title = "My Session \u{1f389}";
+        let mut first_row: Option<String> = None;
         for _ in 0..5 {
             let backend = ratatui::backend::TestBackend::new(width, height);
             let mut terminal = ratatui::Terminal::new(backend).unwrap();
@@ -2466,9 +2479,12 @@ mod tests {
                     let _ = input.view(frame, area, Placeholder::Blank, border_style, Some(hint));
                 })
                 .unwrap();
-            // Verify no panic and border is rendered
-            let buf = terminal.backend().buffer();
-            assert!(buf.area.width == width);
+            let row = top_border_row(terminal.backend().buffer());
+            assert!(!row.contains('\u{fffd}'), "garbled cell in {row:?}");
+            match &first_row {
+                Some(expected) => assert_eq!(expected, &row, "frame render drifted"),
+                None => first_row = Some(row),
+            }
         }
     }
 }
