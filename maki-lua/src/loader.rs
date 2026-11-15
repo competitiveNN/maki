@@ -1382,6 +1382,7 @@ mod tests {
     use crossterm::event::KeyCode;
     use maki_agent::prompt::{PromptId, ResolvedPrompts, Slot, assemble};
     use maki_agent::tools::ToolRegistry;
+    use maki_providers::plugin::reset_for_test;
     use test_case::test_case;
 
     const GLOBAL_TRUST_PATH: &str = "~/src/me/*";
@@ -1413,6 +1414,7 @@ mod tests {
     /// interpreter path needs its own coverage.
     #[test]
     fn jit_off_loads_builtins_and_registers_tools() {
+        reset_for_test();
         let reg = Arc::new(ToolRegistry::new());
         let mut host = PluginHost::start(Arc::clone(&reg), Interaction::Tty, false).unwrap();
         host.load_builtins(&PluginsConfig::from_plugins(HashMap::new()))
@@ -1496,6 +1498,7 @@ mod tests {
 
     #[test]
     fn memory_builtin_registers_command() {
+        reset_for_test();
         let reg = Arc::new(ToolRegistry::new());
         let host = PluginHost::with_all_builtins(Arc::clone(&reg)).unwrap();
         let reader = host.command_reader();
@@ -3130,6 +3133,7 @@ mod bundled_manifests {
     use include_dir::{Dir, DirEntry, File};
     use maki_agent::tools::{ToolReach, ToolRegistry};
     use maki_config::{DEFAULT_BUILTINS, PluginsConfig};
+    use maki_providers::plugin::reset_for_test;
     use strum::VariantArray;
     use test_case::test_case;
 
@@ -3182,6 +3186,7 @@ mod bundled_manifests {
     /// permission the plugin lacks, which makes shipping the tool itself a use
     /// of it.
     fn bundled_reaches() -> Vec<(String, String, Option<ToolReach>)> {
+        reset_for_test();
         let registry = Arc::new(ToolRegistry::new());
         let mut host = PluginHost::new(Arc::clone(&registry)).expect("host starts");
         host.load_builtins(&PluginsConfig::from_plugins(HashMap::new()))

@@ -583,35 +583,21 @@ impl App {
 /// multi-codepoint emoji (ZWJ sequences, variation selectors) are never split
 /// and the result is always a valid UTF-8 string.
 fn truncate_title_tail(title: &str, max_width: usize) -> String {
-    use unicode_segmentation::UnicodeSegmentation;
-    use unicode_width::UnicodeWidthStr;
+    use crate::truncate::tail_fitting;
 
-    if title.width() <= max_width {
-        return title.to_string();
+    let (tail, fits) = tail_fitting(title, max_width);
+    if fits {
+        return tail.to_string();
     }
     if max_width == 0 {
         return String::new();
     }
     // Reserve one cell for the ellipsis; only cells left over hold title text.
-    let budget = max_width.saturating_sub(1);
-    let graphemes: Vec<&str> = title.graphemes(true).collect();
-    let mut width = 0usize;
-    let mut start = graphemes.len();
-    while start > 0 {
-        let g_width = graphemes[start - 1].width();
-        if width + g_width > budget {
-            break;
-        }
-        width += g_width;
-        start -= 1;
-    }
-    if start == graphemes.len() {
-        // Not even one grapheme fits once the ellipsis is accounted for.
+    let (tail, _) = tail_fitting(title, max_width - 1);
+    if tail.is_empty() {
         return String::new();
     }
-    let mut out = String::from('\u{2026}');
-    out.push_str(&graphemes[start..].concat());
-    out
+    format!("\u{2026}{tail}")
 }
 
 #[cfg(test)]

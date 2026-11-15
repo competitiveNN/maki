@@ -25,6 +25,7 @@ use maki_agent::{
 use maki_config::{PluginFileConfig, PluginsConfig};
 use maki_lua::test_support::runtime;
 use maki_lua::{EventHandle, MoveOutcome, PluginHost};
+use maki_providers::plugin::reset_for_test;
 use maki_providers::test_support::isolated_home;
 use maki_storage::id::MakiId;
 use maki_storage::paths::{session_data_dir, state_dir};
@@ -72,6 +73,7 @@ const KEPT_TAIL_LINES: usize = TAIL_LINES / 2;
 const PADDED_LINES: usize = 60;
 
 fn builtins_host(opts: &Value) -> (Arc<ToolRegistry>, PluginHost) {
+    reset_for_test();
     let reg = Arc::new(ToolRegistry::new());
     let mut host = PluginHost::new(Arc::clone(&reg)).unwrap();
     let mut bash = PluginFileConfig::default();
