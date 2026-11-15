@@ -270,6 +270,16 @@ fn model_col_width(names: impl IntoIterator<Item = impl AsRef<str>>) -> usize {
         .max(MODEL_COL_MIN)
 }
 
+/// Pads `text` with trailing spaces to `width` display cells. Format padding
+/// (`{:<width$}`) counts chars, so a CJK or emoji model name would be padded
+/// short and shove the numeric columns right.
+fn pad_to_width(text: &str, width: usize) -> String {
+    let mut out = String::with_capacity(text.len() + width.saturating_sub(text.width()));
+    out.push_str(text);
+    out.push_str(&" ".repeat(width.saturating_sub(text.width())));
+    out
+}
+
 fn header_row(model_w: usize, theme: &crate::theme::Theme) -> Vec<Span<'static>> {
     let h = |label: &str| Span::styled(format!("{label:>NUM_COL$}"), theme.status_dim);
     let gap = || Span::raw(" ".repeat(COL_GAP));
@@ -326,7 +336,7 @@ fn provider_by_model_row(row: &ModelUsageRow, model_w: usize, fg: Style) -> Vec<
     let dollars = row.spend_microdollars as f64 / 1_000_000.0;
     vec![
         Span::raw(PREFIX),
-        Span::styled(format!("{:<width$}", row.model, width = model_w), fg),
+        Span::styled(pad_to_width(&row.model, model_w), fg),
         gap(),
         num(row.input_tokens),
         gap(),
@@ -350,7 +360,7 @@ fn model_row(
     let gap = || Span::raw(" ".repeat(COL_GAP));
     vec![
         Span::raw(PREFIX),
-        Span::styled(format!("{id:<model_w$}"), fg),
+        Span::styled(pad_to_width(id, model_w), fg),
         gap(),
         num(usage.input),
         gap(),
@@ -497,6 +507,28 @@ mod tests {
 
     fn key(code: KeyCode, mods: KeyModifiers) -> KeyEvent {
         KeyEvent::new(code, mods)
+    }
+
+    #[test]
+    fn pad_to_width_counts_display_cells() {
+        assert_eq!(pad_to_width("abc", 5), "abc  ");
+        // "日本語" is six cells, so ten cells need four spaces, not seven.
+        assert_eq!(pad_to_width("日本語", 10), "日本語    ");
+        assert_eq!(pad_to_width("日本語", 10).width(), 10);
+        assert_eq!(pad_to_width("日本語", 6), "日本語");
+        assert_eq!(pad_to_width("日本語", 2), "日本語");
+    }
+
+    /// A wide model name must land the numeric columns on the same cells as an
+    /// ASCII name; char-count padding would push them right.
+    #[test_case("gpt-4o", "日本語モデル" ; "ascii_and_cjk")]
+    #[test_case("a/b", "👨‍👩‍👧family" ; "ascii_and_zwj")]
+    fn model_columns_align_under_wide_names(ascii: &str, wide: &str) {
+        let model_w = model_col_width([ascii, wide]);
+        let cell = |model: &str| pad_to_width(model, model_w).width();
+        assert_eq!(cell(ascii), model_w);
+        assert_eq!(cell(wide), model_w);
+        assert_eq!(cell(ascii), cell(wide));
     }
 
     #[test_case(key(KeyCode::Esc, KeyModifiers::NONE) ; "esc_closes")]
