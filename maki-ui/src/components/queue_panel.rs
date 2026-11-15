@@ -74,23 +74,38 @@ fn truncate_line(
     style: Style,
     hint: (&'static str, &'static str, &'static str),
 ) -> Line<'static> {
-    let hint_style = theme::current().tool_dim;
-    let hint_len = hint.0.len() + hint.1.len() + hint.2.len();
-    let available = max_width.saturating_sub(hint_len);
+    use unicode_segmentation::UnicodeSegmentation;
+    use unicode_width::UnicodeWidthStr;
 
-    let (text_span, ellipsis) = if text.len() <= available {
+    let hint_style = theme::current().tool_dim;
+    let hint_width: usize = [hint.0, hint.1, hint.2].iter().map(|s| s.width()).sum();
+    let available = max_width.saturating_sub(hint_width);
+
+    let (text_span, ellipsis) = if text.width() <= available {
         (Span::styled(text.to_string(), style), None)
     } else {
-        let truncated_len = text.floor_char_boundary(available.saturating_sub(ELLIPSIS.len()));
+        // Truncate on grapheme boundaries and display cells, never bytes, so
+        // wide/CJK/emoji text neither overflows the panel nor splits a cluster.
+        let budget = available.saturating_sub(ELLIPSIS.width());
+        let mut width = 0;
+        let mut end = 0;
+        for grapheme in text.graphemes(true) {
+            let g_width = grapheme.width();
+            if width + g_width > budget {
+                break;
+            }
+            width += g_width;
+            end += grapheme.len();
+        }
         (
-            Span::styled(text[..truncated_len].to_string(), style),
+            Span::styled(text[..end].to_string(), style),
             Some(Span::styled(ELLIPSIS, hint_style)),
         )
     };
 
     let mut spans = vec![text_span];
     spans.extend(ellipsis);
-    if hint_len > 0 {
+    if hint_width > 0 {
         spans.push(Span::styled(hint.0, hint_style));
         spans.push(Span::styled(hint.1, hint_style));
         spans.push(Span::styled(hint.2, hint_style));
@@ -129,8 +144,12 @@ mod tests {
     #[test_case("abcdefghij", 7, NO_HINT, &["abcd", ELLIPSIS]                             ; "no_hint_truncated")]
     #[test_case("abcde", 5, NO_HINT, &["abcde"]                                           ; "no_hint_exact_width")]
     #[test_case("abcdef", 2, NO_HINT, &[ELLIPSIS]                                     ; "no_hint_tiny_width")]
-    #[test_case("●abc", 5, NO_HINT, &[ELLIPSIS]                                       ; "no_hint_multibyte_narrow")]
-    #[test_case("●●●", 8, NO_HINT, &["●", ELLIPSIS]                                      ; "no_hint_multibyte_fits_one")]
+    #[test_case("●abc", 5, NO_HINT, &["●abc"]                                         ; "no_hint_multibyte_fits_cells")]
+    #[test_case("●●●", 8, NO_HINT, &["●●●"]                                              ; "no_hint_wide_fits_cells")]
+    #[test_case("●●●●", 3, NO_HINT, &[ELLIPSIS]                                       ; "no_hint_wide_ellipsis_only")]
+    #[test_case("日本語", 5, NO_HINT, &["日", ELLIPSIS]                                   ; "no_hint_cjk_truncates_on_grapheme")]
+    #[test_case("ab👩👩", 5, NO_HINT, &["ab", ELLIPSIS]                                  ; "no_hint_emoji_is_wide")]
+    #[test_case("👨‍👩", 1, NO_HINT, &[ELLIPSIS]                                          ; "no_hint_zwj_cluster_never_split")]
     #[test_case("hello", 20, HINT, &["hello", HINT_STR]                                   ; "hint_short")]
     #[test_case("abcdefghijklmnopqrstuvwxyz", 18, HINT, &["abcdefgh", ELLIPSIS, HINT_STR]  ; "hint_truncated")]
     #[test_case("ab", 9, HINT, &["ab", HINT_STR]                                          ; "hint_exact_fit")]
