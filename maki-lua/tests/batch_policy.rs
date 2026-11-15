@@ -26,6 +26,7 @@ use maki_lua::test_support::runtime;
 use maki_lua::{KILL_GRACE, MoveOutcome, PluginHost, PluginPermissions, UiAction};
 use maki_providers::{TaskAnswer, TaskSettled};
 use serde_json::{Value, json};
+use serial_test::serial;
 use test_case::test_case;
 
 const BATCH_PLUGIN_SRC: &str = include_str!("../../plugins/batch/init.lua");
@@ -1123,6 +1124,7 @@ fn header_click_toggles_all_children() {
 /// replaces these spans; covered at text level in real_plugins_restore.rs)
 /// and no line numbers read back from disk.
 #[test]
+#[serial]
 fn edit_child_body_renders_diff_not_summary() {
     let (_reg, host) = real_builtins();
     let lines = restore_snapshot_lines(
@@ -1298,6 +1300,7 @@ fn exec_batch_live(
 /// read-modify-write and silently lose one edit. The dispatcher now holds a
 /// per-file lock across each child's whole execution.
 #[test]
+#[serial]
 fn parallel_edits_to_one_file_all_apply() {
     let dir = tempfile::TempDir::new().unwrap();
     let path = dir.path().join(EDIT_TARGET);
@@ -1327,6 +1330,7 @@ fn parallel_edits_to_one_file_all_apply() {
 /// Overlapping edits cannot both apply, so the contract is that the loser
 /// says so. Which one loses is the lock's business, not ours.
 #[test]
+#[serial]
 fn overlapping_parallel_edits_fail_loudly() {
     let dir = tempfile::TempDir::new().unwrap();
     let path = dir.path().join(EDIT_TARGET);
@@ -1409,6 +1413,7 @@ fn run_live_batch(child_src: &str, tool: &str) -> Vec<BufferSnapshot> {
 #[test_case::test_case("index", |file, _| json!({ "path": file }) ; "index_file")]
 #[test_case::test_case("grep", |_, dir| json!({ "pattern": "main", "path": dir }) ; "grep_dir")]
 #[test_case::test_case("list", |_, dir| json!({ "path": dir }) ; "list_dir")]
+#[serial]
 fn batch_child_body_matches_standalone(tool: &str, input: fn(&str, &str) -> Value) {
     let dir = tempfile::TempDir::new().unwrap();
     let file = dir.path().join(PROBE_FILE_NAME);
