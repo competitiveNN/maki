@@ -3,6 +3,7 @@
 
 use std::path::Path;
 use std::sync::{Arc, Mutex, OnceLock};
+use std::time::{Duration, Instant};
 
 use rusqlite::{Connection, OptionalExtension, Statement};
 use std::collections::HashMap;
@@ -173,7 +174,12 @@ impl DatabasePool {
         f(&mut db)
     }
 
-    /// Execute a read-only operation (can be parallel with other reads in WAL).
+    /// Execute a read-only operation.
+    ///
+    /// NOTE: This takes an exclusive lock because `rusqlite::Connection` is
+    /// `Send` but not `Sync`. Concurrent reads in WAL mode would require a
+    /// separate connection per reader (connection pool), which is a larger
+    /// refactor. For now, callers serialize through the mutex.
     pub fn with_read<F, T>(&self, f: F) -> Result<T, StorageError>
     where
         F: FnOnce(&Database) -> Result<T, StorageError>,
@@ -186,11 +192,23 @@ impl DatabasePool {
     }
 }
 
+/// Maximum number of pooled connections kept in the registry. Entries beyond
+/// this are evicted least-recently-used.
+const MAX_POOLS: usize = 32;
+/// Idle timeout after which a pooled connection is evicted.
+const POOL_IDLE_TIMEOUT: Duration = Duration::from_secs(300);
+
+/// A registry entry tracking the pool and its last access time for LRU eviction.
+struct RegistryEntry {
+    pool: DatabasePool,
+    last_access: Instant,
+}
+
 /// Global pool registry for databases keyed by path.
 /// Allows plugins to share a single connection per database file.
-static POOL_REGISTRY: OnceLock<Mutex<HashMap<String, DatabasePool>>> = OnceLock::new();
+static POOL_REGISTRY: OnceLock<Mutex<HashMap<String, RegistryEntry>>> = OnceLock::new();
 
-fn registry() -> &'static Mutex<HashMap<String, DatabasePool>> {
+fn registry() -> &'static Mutex<HashMap<String, RegistryEntry>> {
     POOL_REGISTRY.get_or_init(|| Mutex::new(HashMap::new()))
 }
 
@@ -204,11 +222,31 @@ pub fn get_pool(path: &Path) -> Result<DatabasePool, StorageError> {
     let mut reg = registry()
         .lock()
         .map_err(|e| StorageError::Io(std::io::Error::other(e.to_string())))?;
-    if let Some(pool) = reg.get(&key) {
-        return Ok(pool.clone());
+    let now = Instant::now();
+    // Evict idle entries.
+    reg.retain(|_, entry| now.duration_since(entry.last_access) < POOL_IDLE_TIMEOUT);
+    if let Some(entry) = reg.get_mut(&key) {
+        entry.last_access = now;
+        return Ok(entry.pool.clone());
+    }
+    // Evict least-recently-used if at capacity.
+    if reg.len() >= MAX_POOLS {
+        if let Some(lru_key) = reg
+            .iter()
+            .min_by_key(|(_, e)| e.last_access)
+            .map(|(k, _)| k.clone())
+        {
+            reg.remove(&lru_key);
+        }
     }
     let pool = DatabasePool::new(path)?;
-    reg.insert(key, pool.clone());
+    reg.insert(
+        key,
+        RegistryEntry {
+            pool: pool.clone(),
+            last_access: now,
+        },
+    );
     Ok(pool)
 }
 
