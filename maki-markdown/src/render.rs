@@ -783,10 +783,15 @@ pub fn truncate_long_lines_at(text: &str, max_bytes: usize) -> Cow<'_, str> {
             result.push('\n');
         }
         if line.len() > max_bytes {
-            let mut boundary = max_bytes;
-            while !line.is_char_boundary(boundary) {
-                boundary -= 1;
-            }
+            // Back up to a grapheme boundary, not merely a char one, so a
+            // combining mark, variation selector, or ZWJ cluster is never cut
+            // in half and left dangling before the suffix.
+            let boundary = line
+                .grapheme_indices(true)
+                .map(|(i, _)| i)
+                .take_while(|&i| i <= max_bytes)
+                .last()
+                .unwrap_or(0);
             result.push_str(&line[..boundary]);
             result.push_str(LONG_LINE_SUFFIX);
         } else {
@@ -1088,6 +1093,22 @@ mod tests {
         assert!(truncate_long_lines(&with_nl).ends_with('\n'));
         let without_nl = "z".repeat(max + 10);
         assert!(!truncate_long_lines(&without_nl).ends_with('\n'));
+    }
+
+    /// The byte cap backs up to a whole grapheme, so it never leaves half a
+    /// ZWJ cluster or a combining mark dangling in front of the suffix.
+    #[test]
+    fn truncate_long_lines_cuts_on_grapheme_boundaries() {
+        let family = "\u{1f468}\u{200d}\u{1f469}\u{200d}\u{1f467}";
+        let zwj = format!("abcd{family}");
+        let out = truncate_long_lines_at(&zwj, 5);
+        assert_eq!(&*out, &format!("abcd{LONG_LINE_SUFFIX}"));
+        assert!(!out.contains('\u{200d}'), "split ZWJ: {out:?}");
+
+        let combining = "abcd\u{0065}\u{0301}";
+        let out = truncate_long_lines_at(combining, 5);
+        assert_eq!(&*out, &format!("abcd{LONG_LINE_SUFFIX}"));
+        assert!(!out.contains('\u{0301}') || out.contains("\u{0065}\u{0301}"));
     }
 
     #[test]
