@@ -29,7 +29,7 @@ impl Database {
              PRAGMA synchronous = NORMAL; \
              PRAGMA foreign_keys = ON; \
              PRAGMA cache_size = -2048; \
-             PRAGMA temp_store = memory;",
+             PRAGMA temp_store = file; PRAGMA busy_timeout = 5000;",
         )?;
         debug!(path = %path.display(), "opened sqlite database in WAL mode");
         Ok(Self { conn })
@@ -39,7 +39,9 @@ impl Database {
     /// engine keeps it in memory.
     pub fn open_in_memory() -> Result<Self, StorageError> {
         let conn = Connection::open_in_memory()?;
-        let _ = conn.execute_batch("PRAGMA journal_mode = WAL;");
+        let _ = conn.execute_batch(
+            "PRAGMA journal_mode = WAL; PRAGMA temp_store = memory; PRAGMA busy_timeout = 5000;",
+        );
         Ok(Self { conn })
     }
 
