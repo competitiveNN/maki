@@ -14,6 +14,11 @@ run *ARGS:
 install *ARGS:
     cargo install --locked --path . {{ARGS}}
 
+# nextest runs every test in its own process. The maki-lua integration suite
+# talks to a process-global provider/model registry, so plain parallel
+# `cargo test -p maki-lua` races across tests in one binary; this is the only
+# supported full-suite path. (The lib tests are serialized and do pass under
+# plain `cargo test -p maki-lua --lib`.)
 test *ARGS:
     cargo nextest run --workspace {{ARGS}}
 
