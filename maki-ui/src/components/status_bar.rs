@@ -10,7 +10,9 @@ use super::{RetryInfo, Status};
 
 use crate::animation::spinner_frame;
 use crate::theme;
+use crate::truncate::tail_fitting;
 
+use crate::repaint::{Cadence, Dirty};
 use maki_providers::format_tokens;
 use notify::{Config, Error, Event, EventKindMask, RecommendedWatcher, RecursiveMode, Watcher};
 use ratatui::Frame;
@@ -19,9 +21,7 @@ use ratatui::style::Style;
 use ratatui::text::{Line, Span};
 use ratatui::widgets::Paragraph;
 use tracing::warn;
-use unicode_width::{UnicodeWidthChar, UnicodeWidthStr};
-
-use crate::repaint::{Cadence, Dirty};
+use unicode_width::UnicodeWidthStr;
 
 const TRUNCATE_PREFIX: &str = "..";
 const CWD_MODEL_SEPARATOR: &str = "  ";
@@ -352,17 +352,8 @@ fn truncate_tail(s: &str, max_width: usize) -> Cow<'_, str> {
         return Cow::Borrowed(s);
     }
     let budget = max_width.saturating_sub(TRUNCATE_PREFIX.width());
-    let mut used = 0;
-    let mut start = s.len();
-    for (i, c) in s.char_indices().rev() {
-        let w = c.width().unwrap_or(0);
-        if used + w > budget {
-            break;
-        }
-        used += w;
-        start = i;
-    }
-    Cow::Owned(format!("{TRUNCATE_PREFIX}{}", &s[start..]))
+    let (tail, _) = tail_fitting(s, budget);
+    Cow::Owned(format!("{TRUNCATE_PREFIX}{tail}"))
 }
 
 fn collapse_home(path: &str) -> String {
