@@ -21,6 +21,7 @@ use crate::components::modal::Modal;
 use crate::components::scrollbar::render_vertical_scrollbar;
 use crate::repaint::{Dirty, Watch};
 use crate::theme;
+use unicode_width::UnicodeWidthStr;
 
 const TITLE: &str = " Token usage ";
 const PREFIX: &str = "  ";
@@ -263,7 +264,7 @@ fn totals_row(
 fn model_col_width(names: impl IntoIterator<Item = impl AsRef<str>>) -> usize {
     names
         .into_iter()
-        .map(|name| name.as_ref().chars().count())
+        .map(|name| name.as_ref().width())
         .max()
         .unwrap_or(0)
         .max(MODEL_COL_MIN)
@@ -410,7 +411,7 @@ fn quota_lines(
             let label_w = usage
                 .limits
                 .iter()
-                .map(|l| l.label.chars().count())
+                .map(|l| l.label.width())
                 .max()
                 .unwrap_or(0);
             for limit in &usage.limits {
