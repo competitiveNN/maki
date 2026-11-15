@@ -6,6 +6,8 @@ use crate::components::Overlay;
 use crate::components::keybindings::key;
 use crate::components::list_picker::{ListPicker, PickerAction, PickerItem};
 use crate::repaint::Cadence;
+use crate::truncate::head_fitting;
+use unicode_width::UnicodeWidthStr;
 
 use crossterm::event::{KeyCode, KeyEvent};
 use maki_providers::{Message, Role};
@@ -105,13 +107,16 @@ impl RewindPicker {
             };
             turn_num += 1;
             let first_line = full_text.lines().next().unwrap_or("");
-            let preview = if first_line.len() > PREVIEW_MAX_LEN {
-                format!(
-                    "{turn_num}: {}...",
-                    &first_line[..first_line.floor_char_boundary(PREVIEW_MAX_LEN)]
-                )
-            } else {
+            // Reserve space for "N: " prefix and "..." suffix in display cells.
+            let prefix = format!("{turn_num}: ");
+            let budget = PREVIEW_MAX_LEN
+                .saturating_sub(prefix.width())
+                .saturating_sub(3);
+            let (head, fits) = head_fitting(first_line, budget);
+            let preview = if fits {
                 format!("{turn_num}: {first_line}")
+            } else {
+                format!("{prefix}{head}...")
             };
             entries.push(RewindEntry {
                 turn_index: sent_from,
