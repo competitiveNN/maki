@@ -4,6 +4,7 @@
 mod common;
 
 use maki_lua::test_support::wait_next;
+use maki_providers::plugin::reset_for_test;
 use std::iter;
 use std::sync::Arc;
 use std::sync::mpsc::{Receiver, sync_channel};
@@ -1357,6 +1358,7 @@ fn overlapping_parallel_edits_fail_loudly() {
 }
 
 fn real_builtins() -> (Arc<ToolRegistry>, PluginHost) {
+    reset_for_test();
     let reg = Arc::new(ToolRegistry::new());
     let host = PluginHost::with_all_builtins(Arc::clone(&reg)).unwrap();
     (reg, host)
