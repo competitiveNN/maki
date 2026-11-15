@@ -905,6 +905,7 @@ mod tests {
     #[test_case(|_| with_hosts(None), Some(Missing::ProviderOrigin) ; "another_plugin_falls_short")]
     #[test_case(|_| with_hosts_and_run(None), None ; "a_caller_that_runs_processes_skips_origins")]
     #[test_case(PluginReach::clone, None ; "the_owner_covers_itself")]
+    #[serial_test::serial(global_registry)]
     fn first_missing_compares_provider_origins(
         caller: fn(&PluginReach) -> PluginReach,
         expected: Option<Missing>,

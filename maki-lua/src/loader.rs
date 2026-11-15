@@ -1413,6 +1413,7 @@ mod tests {
     /// (`tests/plugin_host.rs` boots hosts via `new`); only the O1
     /// interpreter path needs its own coverage.
     #[test]
+    #[serial_test::serial(global_registry)]
     fn jit_off_loads_builtins_and_registers_tools() {
         reset_for_test();
         let reg = Arc::new(ToolRegistry::new());
@@ -1497,6 +1498,7 @@ mod tests {
     }
 
     #[test]
+    #[serial_test::serial(global_registry)]
     fn memory_builtin_registers_command() {
         reset_for_test();
         let reg = Arc::new(ToolRegistry::new());
@@ -3224,6 +3226,7 @@ mod bundled_manifests {
     #[test_case("code_execution", None                   ; "code_execution_is_undeclared")]
     #[test_case("memory",         None                   ; "memory_is_undeclared")]
     #[test_case("task",           None                   ; "task_is_undeclared")]
+    #[serial_test::serial(global_registry)]
     fn bundled_tools_declare_their_reach(tool: &str, expected: Option<ToolReach>) {
         let (_, _, reach) = bundled_reaches()
             .into_iter()
@@ -3375,6 +3378,7 @@ mod bundled_manifests {
     }
 
     #[test]
+    #[serial_test::serial(global_registry)]
     fn bundled_manifests_match_the_permissions_their_plugin_uses() {
         let tools = tool_permissions();
         let guarded = guarded_calls();

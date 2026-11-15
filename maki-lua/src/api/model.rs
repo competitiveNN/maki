@@ -343,6 +343,7 @@ mod tests {
     #[test_case("return model.set({ thinking = '', fast = false })", json!({ "thinking": "", "fast": false }) ; "set_empty_thinking_and_false_fast")]
     #[test_case("local m = model.get() return model.set(m)", json!({ "spec": SPEC, "thinking": THINKING, "fast": true }) ; "set_fed_by_get")]
     #[tokio::test]
+    #[serial_test::serial(global_registry)]
     async fn requests_cross_the_channel_and_answer_with_the_new_state(
         script: &str,
         expected: Json,
@@ -357,6 +358,7 @@ mod tests {
     #[test_case(stub_ui(|_| None), UI_DROPPED_ERR ; "reply_channel_dropped")]
     #[test_case(stub_ui(|_| Some(Err(UI_FAILURE.to_owned()))), UI_FAILURE ; "ui_refused")]
     #[tokio::test]
+    #[serial_test::serial(global_registry)]
     async fn unanswered_request_returns_an_error_pair(lua: Lua, expected: &str) {
         assert_eq!(
             eval(&lua, "return model.get()").await,
@@ -367,6 +369,7 @@ mod tests {
     /// `info` resolves locally: no UI required, and a builtin model answers
     /// with its identity and price table.
     #[tokio::test]
+    #[serial_test::serial(global_registry)]
     async fn info_resolves_a_builtin_model_without_a_ui() {
         let lua = lua_with_model(None);
         let (val, err) = eval(&lua, "return model.info('anthropic/claude-sonnet-4-5')").await;
@@ -386,6 +389,7 @@ mod tests {
     #[test_case("anthropic/claude-sonnet-4-5", json!(false) ; "metered_is_not_free")]
     #[test_case("ollama/my-custom-model", Json::Null   ; "no_price_table_is_unknown")]
     #[tokio::test]
+    #[serial_test::serial(global_registry)]
     async fn info_free_separates_zero_from_unknown(spec: &str, expected: Json) {
         let lua = lua_with_model(None);
         let (val, err) = eval(&lua, &format!("return model.info('{spec}')")).await;
@@ -396,6 +400,7 @@ mod tests {
     /// `tier` answers the assigned model in the same shape `info` does, so a
     /// plugin can hand the spec straight to `set`.
     #[tokio::test]
+    #[serial_test::serial(global_registry)]
     async fn tier_returns_the_assigned_model() {
         let (lua, tier, spec) = assign_tier(SPEC, ModelTier::Strong);
         let (val, err) = eval(&lua, "return model.tier('strong')").await;
@@ -409,6 +414,7 @@ mod tests {
     /// An untouched slot still answers the curated default a subagent would
     /// get, flagged so a plugin can tell it from a real pick.
     #[tokio::test]
+    #[serial_test::serial(global_registry)]
     async fn tier_without_an_assignment_falls_back_to_the_default() {
         let (val, err) = eval(
             &lua_with_model(None),
@@ -422,6 +428,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[serial_test::serial(global_registry)]
     async fn tier_with_nothing_to_resolve_answers_nil() {
         let (val, err) = eval(&lua_with_model(None), "return model.tier('compaction')").await;
         assert_eq!((val, err), (Json::Null, None));
@@ -430,6 +437,7 @@ mod tests {
     /// A name maki does not know reports through the error slot, the same way
     /// `set` reports a spec it cannot parse.
     #[tokio::test]
+    #[serial_test::serial(global_registry)]
     async fn tier_with_an_unknown_name_returns_an_error_pair() {
         let (val, err) = eval(&lua_with_model(None), "return model.tier('turbo')").await;
         assert_eq!(val, Json::Null);
@@ -441,6 +449,7 @@ mod tests {
     /// The spec has no provider slug, so it fails before the catalog is
     /// fetched and the test stays off the network.
     #[tokio::test]
+    #[serial_test::serial(global_registry)]
     async fn tier_with_a_stale_assignment_returns_an_error_pair() {
         let (lua, tier, spec) = assign_tier("removed-model", ModelTier::Weak);
         let (val, err) = eval(&lua, "return model.tier('weak')").await;
@@ -451,6 +460,7 @@ mod tests {
 
     /// An unresolvable spec answers `(nil, err)` instead of throwing.
     #[tokio::test]
+    #[serial_test::serial(global_registry)]
     async fn info_unknown_provider_returns_an_error_pair() {
         let lua = lua_with_model(None);
         let (val, err) = eval(&lua, "return model.info('no-such-provider/nope')").await;
@@ -461,6 +471,7 @@ mod tests {
     /// The subsidy sits at the top level so pickers can render "$0 (Max)"
     /// rows without re-deriving it.
     #[test]
+    #[serial_test::serial(global_registry)]
     fn info_table_carries_the_subsidy_source() {
         let lua = Lua::new();
         let mut model = Model::from_spec("anthropic/claude-sonnet-4-5").unwrap();
@@ -474,6 +485,7 @@ mod tests {
     /// never resolved. Nesting the source under `pricing` hid it exactly
     /// here, because `pricing` is omitted at zero rates.
     #[test]
+    #[serial_test::serial(global_registry)]
     fn info_table_reports_a_subsidy_with_no_price_table() {
         let lua = Lua::new();
         let mut model = Model::from_spec("ollama/my-custom-model").unwrap();
@@ -490,6 +502,7 @@ mod tests {
     #[test_case("return model.set()" ; "no_argument")]
     #[test_case("return model.set(nil)" ; "explicit_nil")]
     #[tokio::test]
+    #[serial_test::serial(global_registry)]
     async fn set_throws_on_a_non_spec_argument(script: &str) {
         let lua = lua_with_model(None);
         let err = lua.load(script).eval_async::<Value>().await.unwrap_err();
