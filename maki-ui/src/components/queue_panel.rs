@@ -154,4 +154,39 @@ mod tests {
             expected
         );
     }
+
+    /// Every cut on random Unicode stays within the panel width and never
+    /// emits a replacement char, for any width a real panel can have.
+    #[test]
+    fn randomized_lines_stay_within_budget() {
+        let mut rng = fastrand::Rng::with_seed(0x0be7);
+        let pools: &[&[char]] = &[
+            &['a', 'b', ' ', '-', '_'],
+            &['\u{65e5}', '\u{672c}', '\u{8a9e}'],
+            &['\u{1f600}', '\u{1f5a5}'],
+            &['\u{200d}', '\u{fe0f}', '\u{0301}'],
+        ];
+        for _ in 0..300 {
+            let len = rng.usize(0..24);
+            let text: String = (0..len)
+                .map(|_| {
+                    let pool = pools[rng.usize(0..pools.len())];
+                    pool[rng.usize(0..pool.len())]
+                })
+                .collect();
+            // Below the ellipsis width the marker alone cannot fit, which is
+            // the pre-existing tiny-panel behaviour; above it the line must.
+            let min = unicode_width::UnicodeWidthStr::width(ELLIPSIS);
+            for width in min..=20 {
+                let line = truncate_line(&text, width, style(), NO_HINT);
+                assert!(
+                    line.width() <= width,
+                    "{text:?} at {width} is {} wide",
+                    line.width()
+                );
+                let joined: String = line.spans.iter().map(|s| s.content.as_ref()).collect();
+                assert!(!joined.contains('\u{fffd}'));
+            }
+        }
+    }
 }

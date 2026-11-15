@@ -655,4 +655,35 @@ mod tests {
             "\u{2026}\u{1f469}"
         );
     }
+
+    /// Every cut on random Unicode stays within budget, valid, and a
+    /// grapheme-aligned suffix of the title behind the ellipsis.
+    #[test]
+    fn randomized_titles_stay_within_budget() {
+        let mut rng = fastrand::Rng::with_seed(0x7173);
+        let pools: &[&[char]] = &[
+            &['a', 'b', ' ', '-', '_', '.'],
+            &['\u{65e5}', '\u{672c}', '\u{8a9e}'],
+            &['\u{1f600}', '\u{1f5a5}'],
+            &['\u{200d}', '\u{fe0f}', '\u{0301}'],
+        ];
+        for _ in 0..400 {
+            let len = rng.usize(0..24);
+            let title: String = (0..len)
+                .map(|_| {
+                    let pool = pools[rng.usize(0..pools.len())];
+                    pool[rng.usize(0..pool.len())]
+                })
+                .collect();
+            for max in 0..=20 {
+                let out = truncate_title_tail(&title, max);
+                let width = unicode_width::UnicodeWidthStr::width(out.as_str());
+                assert!(width <= max, "{out:?} over {max}");
+                assert!(!out.contains('\u{fffd}'));
+                if let Some(tail) = out.strip_prefix('\u{2026}') {
+                    assert!(title.ends_with(tail), "{tail:?} is not a suffix");
+                }
+            }
+        }
+    }
 }

@@ -611,6 +611,37 @@ mod tests {
         assert_eq!(truncate_tail(input, max_width), expected);
     }
 
+    /// Every tail cut on random Unicode stays within budget, valid, and a
+    /// grapheme-aligned suffix of the input behind the `..` marker.
+    #[test]
+    fn randomized_tails_stay_within_budget() {
+        let mut rng = fastrand::Rng::with_seed(0x7a11);
+        let pools: &[&[char]] = &[
+            &['a', 'b', ' ', '-', '_', '/', ':'],
+            &['\u{65e5}', '\u{672c}', '\u{8a9e}'],
+            &['\u{1f600}', '\u{1f5a5}'],
+            &['\u{200d}', '\u{fe0f}', '\u{0301}'],
+        ];
+        for _ in 0..300 {
+            let len = rng.usize(0..24);
+            let s: String = (0..len)
+                .map(|_| {
+                    let pool = pools[rng.usize(0..pools.len())];
+                    pool[rng.usize(0..pool.len())]
+                })
+                .collect();
+            for max in 2..=20 {
+                let out = truncate_tail(&s, max);
+                let width = unicode_width::UnicodeWidthStr::width(out.as_ref());
+                assert!(width <= max, "{out:?} over {max}");
+                assert!(!out.contains('\u{fffd}'));
+                if let Some(tail) = out.strip_prefix(TRUNCATE_PREFIX) {
+                    assert!(s.ends_with(tail), "{tail:?} is not a suffix of {s:?}");
+                }
+            }
+        }
+    }
+
     fn tmp_with_head(content: Option<&str>) -> (TempDir, String) {
         let dir = TempDir::new().unwrap();
         if let Some(head) = content {
