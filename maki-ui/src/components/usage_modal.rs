@@ -270,13 +270,19 @@ fn model_col_width(names: impl IntoIterator<Item = impl AsRef<str>>) -> usize {
         .max(MODEL_COL_MIN)
 }
 
-/// Pads `text` with trailing spaces to `width` display cells. Format padding
-/// (`{:<width$}`) counts chars, so a CJK or emoji model name would be padded
-/// short and shove the numeric columns right.
+/// Pads `text` with trailing spaces to `width` display cells. If `text` is
+/// wider than `width`, it is truncated at a grapheme boundary so the
+/// numeric columns never shift right. Format padding (`{:<width$}`) counts
+/// chars, so a CJK or emoji model name would be padded short and shove the
+/// numeric columns right.
 fn pad_to_width(text: &str, width: usize) -> String {
-    let mut out = String::with_capacity(text.len() + width.saturating_sub(text.width()));
-    out.push_str(text);
-    out.push_str(&" ".repeat(width.saturating_sub(text.width())));
+    use crate::truncate::head_fitting;
+    let (head, fits) = head_fitting(text, width);
+    let mut out = String::with_capacity(head.len() + width.saturating_sub(head.width()));
+    out.push_str(head);
+    if fits {
+        out.push_str(&" ".repeat(width - head.width()));
+    }
     out
 }
 
@@ -487,6 +493,7 @@ mod tests {
     use maki_providers::UsageLimit;
     use std::sync::Arc;
     use test_case::test_case;
+    use unicode_segmentation::UnicodeSegmentation;
 
     const RECORDED_COST: f64 = 0.123;
     const RECORDED_TEXT: &str = "0.123";
@@ -516,7 +523,29 @@ mod tests {
         assert_eq!(pad_to_width("日本語", 10), "日本語    ");
         assert_eq!(pad_to_width("日本語", 10).width(), 10);
         assert_eq!(pad_to_width("日本語", 6), "日本語");
-        assert_eq!(pad_to_width("日本語", 2), "日本語");
+        // Width 2 can only fit one CJK grapheme (2 cells each).
+        assert_eq!(pad_to_width("日本語", 2), "日");
+    }
+
+    /// When the text is wider than the target width, it is truncated at a
+    /// grapheme boundary (never mid-cluster) and the result exactly fills
+    /// the width.
+    #[test_case("日本語モデル", 8 ; "cjk_truncated")]
+    #[test_case("gpt-4-turbo", 8 ; "ascii_truncated")]
+    #[test_case("👨‍👩‍👧family", 6 ; "zwj_truncated")]
+    fn pad_to_width_truncates_on_overflow(text: &str, width: usize) {
+        let out = pad_to_width(text, width);
+        assert_eq!(out.width(), width, "{out:?} is not {width} wide");
+        assert!(
+            !out.contains('\u{fffd}'),
+            "contains replacement char: {out:?}"
+        );
+        // The output should be a prefix of the original at grapheme boundaries
+        assert!(
+            text.graphemes(true)
+                .zip(out.graphemes(true))
+                .all(|(a, b)| a == b)
+        );
     }
 
     /// A wide model name must land the numeric columns on the same cells as an
