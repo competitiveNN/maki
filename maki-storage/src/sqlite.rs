@@ -4,7 +4,7 @@
 use std::path::Path;
 use std::sync::{Arc, Mutex, OnceLock};
 
-use rusqlite::{Connection, Statement, OptionalExtension};
+use rusqlite::{Connection, OptionalExtension, Statement};
 use std::collections::HashMap;
 use tracing::debug;
 
@@ -58,7 +58,11 @@ impl Database {
     }
 
     /// Execute a statement with no rows returned.
-    pub fn execute(&self, sql: &str, params: &[&dyn rusqlite::ToSql]) -> Result<usize, StorageError> {
+    pub fn execute(
+        &self,
+        sql: &str,
+        params: &[&dyn rusqlite::ToSql],
+    ) -> Result<usize, StorageError> {
         Ok(self.conn.execute(sql, params)?)
     }
 
@@ -79,7 +83,11 @@ impl Database {
     }
 
     /// Query a single text value, returning `None` when no row matches.
-    pub fn query_text(&self, sql: &str, params: &[&dyn rusqlite::ToSql]) -> Result<Option<String>, StorageError> {
+    pub fn query_text(
+        &self,
+        sql: &str,
+        params: &[&dyn rusqlite::ToSql],
+    ) -> Result<Option<String>, StorageError> {
         let mut stmt = self.conn.prepare(sql)?;
         let mut rows = stmt.query(params)?;
         if let Some(row) = rows.next()? {
@@ -90,7 +98,12 @@ impl Database {
     }
 
     /// Query all rows as a vector of row tuples.
-    pub fn query_all<T, F>(&self, sql: &str, params: &[&dyn rusqlite::ToSql], f: F) -> Result<Vec<T>, StorageError>
+    pub fn query_all<T, F>(
+        &self,
+        sql: &str,
+        params: &[&dyn rusqlite::ToSql],
+        f: F,
+    ) -> Result<Vec<T>, StorageError>
     where
         F: Fn(&rusqlite::Row<'_>) -> Result<T, rusqlite::Error>,
     {
@@ -104,7 +117,12 @@ impl Database {
     }
 
     /// Query a single row, returning `None` if not found.
-    pub fn query_one<T, F>(&self, sql: &str, params: &[&dyn rusqlite::ToSql], f: F) -> Result<Option<T>, StorageError>
+    pub fn query_one<T, F>(
+        &self,
+        sql: &str,
+        params: &[&dyn rusqlite::ToSql],
+        f: F,
+    ) -> Result<Option<T>, StorageError>
     where
         F: Fn(&rusqlite::Row<'_>) -> Result<T, rusqlite::Error>,
     {
@@ -122,7 +140,8 @@ impl Database {
 
     /// Enable busy timeout for contention handling (ms).
     pub fn set_busy_timeout(&self, ms: u32) -> Result<(), StorageError> {
-        self.conn.busy_timeout(std::time::Duration::from_millis(ms as u64))?;
+        self.conn
+            .busy_timeout(std::time::Duration::from_millis(ms as u64))?;
         Ok(())
     }
 }
@@ -147,7 +166,10 @@ impl DatabasePool {
     where
         F: FnOnce(&mut Database) -> Result<T, StorageError>,
     {
-        let mut db = self.inner.lock().map_err(|e| StorageError::Io(std::io::Error::other(e.to_string())))?;
+        let mut db = self
+            .inner
+            .lock()
+            .map_err(|e| StorageError::Io(std::io::Error::other(e.to_string())))?;
         f(&mut db)
     }
 
@@ -156,8 +178,11 @@ impl DatabasePool {
     where
         F: FnOnce(&Database) -> Result<T, StorageError>,
     {
-        let db = self.inner.lock().map_err(|e| StorageError::Io(std::io::Error::other(e.to_string())))?;
-        f(&*db)
+        let db = self
+            .inner
+            .lock()
+            .map_err(|e| StorageError::Io(std::io::Error::other(e.to_string())))?;
+        f(&db)
     }
 }
 
@@ -171,8 +196,14 @@ fn registry() -> &'static Mutex<HashMap<String, DatabasePool>> {
 
 /// Get or create a shared database pool for the given path.
 pub fn get_pool(path: &Path) -> Result<DatabasePool, StorageError> {
-    let key = path.canonicalize().unwrap_or_else(|_| path.to_path_buf()).to_string_lossy().to_string();
-    let mut reg = registry().lock().map_err(|e| StorageError::Io(std::io::Error::other(e.to_string())))?;
+    let key = path
+        .canonicalize()
+        .unwrap_or_else(|_| path.to_path_buf())
+        .to_string_lossy()
+        .to_string();
+    let mut reg = registry()
+        .lock()
+        .map_err(|e| StorageError::Io(std::io::Error::other(e.to_string())))?;
     if let Some(pool) = reg.get(&key) {
         return Ok(pool.clone());
     }
@@ -219,7 +250,8 @@ mod tests {
         let path = tmp.path().join("test.db");
         let _db = Database::open(&path).unwrap();
         // WAL mode creates -wal/-shm on first write; force a write
-        _db.execute("CREATE TABLE IF NOT EXISTS t (x INTEGER)", &[]).unwrap();
+        _db.execute("CREATE TABLE IF NOT EXISTS t (x INTEGER)", &[])
+            .unwrap();
         _db.execute("INSERT INTO t (x) VALUES (1)", &[]).unwrap();
         assert!(tmp.path().join("test.db-wal").exists() || tmp.path().join("test.db").exists());
     }
@@ -243,10 +275,11 @@ mod tests {
             db.execute("CREATE TABLE t (x INTEGER)", &[])?;
             db.execute("INSERT INTO t (x) VALUES (42)", &[])?;
             Ok(())
-        }).unwrap();
-        let val = pool.with_read(|db| {
-            db.query_one("SELECT x FROM t", &[], |r| r.get(0))
-        }).unwrap();
+        })
+        .unwrap();
+        let val = pool
+            .with_read(|db| db.query_one("SELECT x FROM t", &[], |r| r.get(0)))
+            .unwrap();
         assert_eq!(val, Some(42));
     }
 
@@ -259,7 +292,9 @@ mod tests {
         for i in 0..5 {
             db.execute("INSERT INTO t (x) VALUES (?1)", &[&i]).unwrap();
         }
-        let rows: Vec<i64> = db.query_all("SELECT x FROM t ORDER BY x", &[], |r| r.get(0)).unwrap();
+        let rows: Vec<i64> = db
+            .query_all("SELECT x FROM t ORDER BY x", &[], |r| r.get(0))
+            .unwrap();
         assert_eq!(rows, vec![0, 1, 2, 3, 4]);
     }
 }

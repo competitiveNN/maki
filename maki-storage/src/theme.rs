@@ -32,8 +32,14 @@ pub fn persist_theme_name(dir: &StateDir, name: &str) {
 pub fn read_theme_name(dir: &StateDir) -> Option<String> {
     let name: String = with_db(dir, |db| {
         db.execute_batch(INIT_SQL)?;
-        db.query_one("SELECT value FROM settings WHERE key = 'theme'", rusqlite::params![], |r| r.get(0))
-    }).ok().flatten()?;
+        db.query_one(
+            "SELECT value FROM settings WHERE key = 'theme'",
+            rusqlite::params![],
+            |r| r.get(0),
+        )
+    })
+    .ok()
+    .flatten()?;
     let name = name.trim();
     (!name.is_empty()).then(|| name.to_owned())
 }
@@ -55,6 +61,8 @@ mod tests {
 
         // Empty/whitespace values should read as None
         persist_theme_name(&dir, "  \n");
-        assert!(read_theme_name(&dir).is_none() || read_theme_name(&dir).as_deref() == Some("  \n"));
+        assert!(
+            read_theme_name(&dir).is_none() || read_theme_name(&dir).as_deref() == Some("  \n")
+        );
     }
 }

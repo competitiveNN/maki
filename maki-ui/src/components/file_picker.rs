@@ -759,7 +759,10 @@ mod tests {
 
     /// Ticks until `ready` holds, collecting the frames owed on the way, or
     /// `None` if the picker never got there.
-    fn tick_until(picker: &mut FilePickerModal, ready: impl Fn(&SessionState) -> bool) -> Option<Dirty> {
+    fn tick_until(
+        picker: &mut FilePickerModal,
+        ready: impl Fn(&SessionState) -> bool,
+    ) -> Option<Dirty> {
         let deadline = Instant::now() + CONVERGE_TIMEOUT;
         let mut dirty = Dirty::NO;
         while Instant::now() < deadline {

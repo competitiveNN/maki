@@ -3,7 +3,6 @@ use std::path::PathBuf;
 use maki_lua_macro::{lua_fn, lua_table};
 use mlua::Lua;
 
-
 use crate::plugin_permissions::PluginPermissions;
 
 fn utf8(p: PathBuf) -> Option<String> {

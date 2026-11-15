@@ -40,8 +40,7 @@ pub fn persist_model(dir: &StateDir, spec: &str) {
             "INSERT INTO settings (key, value) VALUES ('model', ?1)
              ON CONFLICT(key) DO UPDATE SET value = excluded.value",
             params![spec],
-        )
-        .map(|_| ())?;
+        )?;
         Ok(())
     });
 }
@@ -70,8 +69,7 @@ pub fn persist_thinking(dir: &StateDir, thinking: StoredThinking) {
             "INSERT INTO settings (key, value) VALUES ('thinking', ?1)
              ON CONFLICT(key) DO UPDATE SET value = excluded.value",
             params![thinking.to_string()],
-        )
-        .map(|_| ())?;
+        )?;
         Ok(())
     });
 }
@@ -94,13 +92,10 @@ pub fn read_thinking(dir: &StateDir) -> Option<StoredThinking> {
 /// file as it was.
 pub fn read_expanded_providers(dir: &StateDir) -> BTreeSet<String> {
     with_db(dir, |db| {
-        db.query_all(
-            "SELECT slug FROM expanded_providers",
-            params![],
-            |r| r.get(0),
-        )
+        db.query_all("SELECT slug FROM expanded_providers", params![], |r| {
+            r.get(0)
+        })
         .map(|rows| rows.into_iter().collect())
-        .map_err(StorageError::from)
     })
     .unwrap_or_default()
 }
@@ -137,7 +132,6 @@ pub fn push_recent(dir: &StateDir, spec: &str) -> Vec<String> {
         db.query_all("SELECT spec FROM recents ORDER BY seq", params![], |r| {
             r.get(0)
         })
-        .map_err(StorageError::from)
     })
     .unwrap_or_default()
 }
@@ -161,7 +155,6 @@ pub fn read_recents(dir: &StateDir) -> Vec<String> {
         db.query_all("SELECT spec FROM recents ORDER BY seq", params![], |r| {
             r.get(0)
         })
-        .map_err(StorageError::from)
     })
     .unwrap_or_default()
 }
@@ -230,9 +223,8 @@ mod tests {
                 "INSERT INTO settings (key, value) VALUES ('thinking', ?1)
                  ON CONFLICT(key) DO UPDATE SET value = excluded.value",
                 params![raw],
-            )
-            .map(|_| ())
-            .map_err(StorageError::from)
+            )?;
+            Ok(())
         });
         assert!(read_thinking(&dir).is_none());
     }

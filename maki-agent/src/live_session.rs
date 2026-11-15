@@ -1,6 +1,6 @@
 use std::collections::{HashMap, VecDeque};
-use std::sync::{Arc, LazyLock, Mutex, MutexGuard, PoisonError, Weak};
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, LazyLock, Mutex, MutexGuard, PoisonError, Weak};
 
 use arc_swap::ArcSwap;
 use maki_config::ModelPolicy;
