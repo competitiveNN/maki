@@ -7,6 +7,7 @@ use ratatui::buffer::Buffer;
 use ratatui::layout::Rect;
 use ratatui::style::{Color, Modifier, Style};
 use std::time::Instant;
+use unicode_width::UnicodeWidthStr;
 
 #[cfg(test)]
 use serial_test::serial;
@@ -514,7 +515,7 @@ fn render_version(area: Rect, buf: &mut Buffer, fade: f32, y: u16, new_version: 
         None => format!("v{}", update::CURRENT),
     };
     let style = faded_style(theme.foreground, bg, VERSION_ALPHA * fade);
-    let x_start = area.x + area.width.saturating_sub(text.chars().count() as u16 + 1);
+    let x_start = area.x + area.width.saturating_sub(text.width() as u16 + 1);
     render_segments(area, buf, y, x_start, &[(&text, style)]);
 }
 
@@ -532,7 +533,7 @@ fn render_centered_faded(
     let theme = theme::current();
     let bg = theme.background;
     let style = faded_style(theme.foreground, bg, intensity * fade);
-    let x_start = area.x + area.width.saturating_sub(text.chars().count() as u16) / 2;
+    let x_start = area.x + area.width.saturating_sub(text.width() as u16) / 2;
     render_segments(area, buf, y, x_start, &[(text, style)]);
 }
 

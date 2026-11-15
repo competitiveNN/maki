@@ -74,31 +74,21 @@ fn truncate_line(
     style: Style,
     hint: (&'static str, &'static str, &'static str),
 ) -> Line<'static> {
-    use unicode_segmentation::UnicodeSegmentation;
+    use crate::truncate::head_fitting;
     use unicode_width::UnicodeWidthStr;
 
     let hint_style = theme::current().tool_dim;
     let hint_width: usize = [hint.0, hint.1, hint.2].iter().map(|s| s.width()).sum();
     let available = max_width.saturating_sub(hint_width);
 
-    let (text_span, ellipsis) = if text.width() <= available {
-        (Span::styled(text.to_string(), style), None)
+    let (head, fits) = head_fitting(text, available);
+    let (text_span, ellipsis) = if fits {
+        (Span::styled(head.to_string(), style), None)
     } else {
-        // Truncate on grapheme boundaries and display cells, never bytes, so
-        // wide/CJK/emoji text neither overflows the panel nor splits a cluster.
-        let budget = available.saturating_sub(ELLIPSIS.width());
-        let mut width = 0;
-        let mut end = 0;
-        for grapheme in text.graphemes(true) {
-            let g_width = grapheme.width();
-            if width + g_width > budget {
-                break;
-            }
-            width += g_width;
-            end += grapheme.len();
-        }
+        // Reserve room for the ellipsis, then keep as much of the head as fits.
+        let (head, _) = head_fitting(text, available.saturating_sub(ELLIPSIS.width()));
         (
-            Span::styled(text[..end].to_string(), style),
+            Span::styled(head.to_string(), style),
             Some(Span::styled(ELLIPSIS, hint_style)),
         )
     };
