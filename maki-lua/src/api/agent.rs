@@ -3362,17 +3362,15 @@ mod tests {
     #[test_case(Some(ASSIGNED_SPEC) ; "assignment_beats_the_session_provider")]
     #[test_case(Some(STALE_SPEC) ; "stale_assignment_fails_instead_of_falling_back")]
     #[tokio::test]
+    #[serial_test::serial(global_registry)]
     async fn task_model_selection_follows_the_tier_assignment(assigned: Option<&str>) {
         let mut ctx = stub_ctx_with(&AgentMode::Build, None, Some(PARENT_ID));
         ctx.model = Arc::new(Model::from_spec(SESSION_SPEC).unwrap());
         let ctx = AgentContext::from(&ctx);
         let dir = tempfile::TempDir::new().unwrap();
+        let storage = maki_storage::StateDir::from_path(dir.path().to_path_buf());
         if let Some(spec) = assigned {
-            model_registry::set_and_persist(
-                spec.into(),
-                ModelTier::Weak,
-                &maki_storage::StateDir::from_path(dir.path().to_path_buf()),
-            );
+            model_registry::set_and_persist(spec.into(), ModelTier::Weak, &storage);
         }
 
         let resolved = resolve_model_from_ctx(&ctx, Some(ModelTier::Weak.to_string().as_str()))
@@ -3390,6 +3388,11 @@ mod tests {
             Some((spec, Err(cause))) => {
                 assert_eq!(resolved, Err(stale_tier_err(ModelTier::Weak, spec, cause)));
             }
+        }
+        // Assignments live in the process-global registry, so leave it as we
+        // found it for the tests that follow in the same process.
+        if let Some(spec) = assigned {
+            model_registry::unset_and_persist(spec, ModelTier::Weak, &storage);
         }
     }
 
