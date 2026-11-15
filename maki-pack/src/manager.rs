@@ -447,7 +447,9 @@ impl Manager {
         let revision_guards = dirs
             .revisions
             .iter()
-            .map(|revision| Lock::acquire(&paths::revision_lock(&self.site, name, revision)))
+            .map(|revision| {
+                Lock::acquire_retrying(&paths::revision_lock(&self.site, name, revision))
+            })
             .collect::<Result<Vec<_>, _>>()?;
         let root = paths::package_root(&self.site, name);
         let trash = paths::package_trash(&self.site, name);
@@ -824,6 +826,7 @@ fn copy_symlink(_target: &Path, _dest: &Path, _is_dir: bool) -> std::io::Result<
 #[cfg(test)]
 mod tests {
     use super::*;
+    use serial_test::serial;
     use test_case::test_case;
 
     const TEST_REV: &str = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
@@ -1435,6 +1438,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn prune_removes_only_unlocked_stale_revisions() {
         const CURRENT: &str = "1111111111111111111111111111111111111111";
         const STALE: &str = "2222222222222222222222222222222222222222";
@@ -1513,6 +1517,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[serial]
     async fn update_is_prepared_before_it_changes_the_lockfile() {
         let mut fixture = Fixture::new().await;
         let first = fixture.install().await;
@@ -1731,6 +1736,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[serial]
     async fn deletion_does_not_treat_internal_directories_as_revisions() {
         let dir = site();
         let manager = Manager::new(dir.path());
@@ -1747,6 +1753,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[serial]
     async fn deletion_preflight_leaves_everything_when_one_revision_is_live() {
         let dir = site();
         let manager = Manager::new(dir.path());

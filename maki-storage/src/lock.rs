@@ -17,8 +17,8 @@ use std::time::{Duration, Instant};
 /// outlives the deadline (a clone can take tens of seconds), so a ~250ms retry
 /// absorbs the inheritance window without ever appearing to wait on a genuine
 /// lock.
-const LOCK_RETRY_DEADLINE: Duration = Duration::from_millis(250);
-const LOCK_RETRY_SLEEP: Duration = Duration::from_millis(5);
+const LOCK_RETRY_DEADLINE: Duration = Duration::from_millis(1000);
+const LOCK_RETRY_SLEEP: Duration = Duration::from_millis(10);
 
 /// Held for as long as the operation runs. Dropping it releases the lock.
 #[derive(Debug)]

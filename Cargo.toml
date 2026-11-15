@@ -110,6 +110,7 @@ url = "2"
 getrandom = "0.4"
 fastrand = "2"
 test-case = "3"
+serial_test = "3"
 ignore = "0.4"
 strum = { version = "0.28", features = ["derive"] }
 htmd = "0.5"

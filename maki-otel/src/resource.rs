@@ -69,6 +69,7 @@ mod tests {
     use std::collections::BTreeMap;
 
     use opentelemetry::Value;
+    use serial_test::serial;
     use test_case::test_case;
 
     use super::*;
@@ -94,6 +95,7 @@ mod tests {
 
     #[test_case("OTEL_SERVICE_NAME", ENV_NAME; "service_name")]
     #[test_case("OTEL_RESOURCE_ATTRIBUTES", "service.name=billing"; "resource_attributes")]
+    #[serial]
     fn a_service_the_environment_names_beats_lua(env: &str, raw: &str) {
         unsafe { std::env::set_var(env, raw) };
         let resource = build(&TelemetryConfig {
@@ -109,6 +111,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn lua_service_name_beats_lua_attributes() {
         // Isolate from environment variables that may be set by other tests.
         unsafe {
