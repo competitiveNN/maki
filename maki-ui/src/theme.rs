@@ -296,6 +296,16 @@ pub fn generation() -> u64 {
     GENERATION.load(Ordering::Acquire)
 }
 
+/// Resets the theme to the default ("dracula") and resets the generation counter. Only for tests.
+#[cfg(test)]
+pub fn reset_to_default() {
+    if let Ok(theme) = load_by_name(DEFAULT_THEME) {
+        THEME.store(Arc::new(theme));
+        crate::highlight::refresh_syntax_theme();
+        GENERATION.store(0, Ordering::Release);
+    }
+}
+
 pub fn load_by_name(name: &str) -> Result<Theme, String> {
     load_from(user_themes_dir().as_deref(), name)
 }

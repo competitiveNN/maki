@@ -569,6 +569,15 @@ pub fn commit_load() {
     PROVIDERS.store(Arc::new(staged));
 }
 
+/// Clears all provider state. Only for tests.
+pub fn reset_for_test() {
+    *STAGING.lock().unwrap() = Some(Registry::new());
+    PROVIDERS.store(Arc::new(Registry::new()));
+    AUTH.lock().unwrap().clear();
+    GRANTED.write().unwrap().clear();
+    maki_config::providers::clear_registered_providers();
+}
+
 /// Takes back everything `plugin` staged in the load in progress, for a plugin
 /// whose load failed after it registered, so its slugs end up where they would
 /// be had the plugin never loaded.

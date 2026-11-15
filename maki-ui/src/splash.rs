@@ -8,6 +8,9 @@ use ratatui::layout::Rect;
 use ratatui::style::{Color, Modifier, Style};
 use std::time::Instant;
 
+#[cfg(test)]
+use serial_test::serial;
+
 const LOGO: &str = "maki";
 const TAGLINE: &str = "the efficient coder";
 const UPDATE_HINT: &str = " run maki update to get v";
@@ -726,6 +729,7 @@ status_dim = { fg = "magenta" }
 
     /// The test sets its theme because the default theme uses RGB colors.
     #[test]
+    #[serial]
     fn a_palette_theme_draws_the_field_without_truecolor() {
         theme::set(theme::Theme::from_toml(ANSI_THEME).expect(ANSI_THEME_NAME));
 
@@ -748,5 +752,6 @@ status_dim = { fg = "magenta" }
             cells().any(|c| c.fg == Color::Magenta && FIELD_SYMS.contains(&c.symbol())),
             "{FIELD_DRAWN}"
         );
+        theme::reset_to_default();
     }
 }

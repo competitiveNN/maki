@@ -36,6 +36,7 @@ use crate::agent::shared_queue::{QueueItem, QueuedInput};
 use crate::app::tests::enter_runtime;
 
 use super::{push_prompt, test_deps};
+use serial_test::serial;
 
 const WAIT: Duration = Duration::from_secs(30);
 const PLUGIN: &str = "background_e2e";
@@ -330,6 +331,8 @@ struct World {
 impl World {
     fn start(steps: Vec<Step>) -> Self {
         let serial = SERIAL.lock().unwrap_or_else(PoisonError::into_inner);
+        ToolRegistry::global_arc().clear_lua();
+        maki_providers::plugin::reset_for_test();
         let runtime = enter_runtime();
         let mut host = PluginHost::new(Arc::clone(ToolRegistry::global_arc())).expect(HOST_STARTS);
         host.load_builtins(&PluginsConfig::from_plugins(HashMap::new()))
@@ -545,6 +548,7 @@ impl World {
 }
 
 #[test]
+#[serial]
 fn a_moved_call_whose_turn_ends_wakes_the_chat_with_its_result() {
     let mut world = World::start(vec![
         Step::new(park_call()),
@@ -593,6 +597,7 @@ fn a_moved_call_whose_turn_ends_wakes_the_chat_with_its_result() {
 }
 
 #[test]
+#[serial]
 fn a_result_landing_mid_run_follows_the_next_tool_results_without_a_new_request() {
     let (release_model, model_gate) = unbounded_channel::<()>();
     let mut world = World::start(vec![
@@ -645,6 +650,7 @@ fn a_result_landing_mid_run_follows_the_next_tool_results_without_a_new_request(
 }
 
 #[test]
+#[serial]
 fn a_task_stopped_by_the_user_is_a_quiet_notice_that_waits_for_the_next_prompt() {
     let mut world = World::start(vec![
         Step::new(park_call()),
@@ -685,6 +691,7 @@ fn a_task_stopped_by_the_user_is_a_quiet_notice_that_waits_for_the_next_prompt()
 }
 
 #[test]
+#[serial]
 fn a_task_stop_by_the_model_returns_the_partial_output_and_sends_no_notice() {
     let mut world = World::start(vec![
         Step::new(park_call()),
@@ -719,6 +726,7 @@ fn a_task_stop_by_the_model_returns_the_partial_output_and_sends_no_notice() {
 /// Esc does not touch moved work, which keeps running and reports like any
 /// other.
 #[test]
+#[serial]
 fn esc_leaves_moved_work_running() {
     let (_model_gate_open, model_gate) = unbounded_channel::<()>();
     let mut world = World::start(vec![

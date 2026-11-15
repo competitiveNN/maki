@@ -17,6 +17,7 @@ use maki_markdown::render::CODE_BAR;
 use maki_providers::ImageMediaType;
 use ratatui::backend::TestBackend;
 use ratatui::style::{Color, Modifier};
+use serial_test::serial;
 use std::collections::HashSet;
 use std::ops::Range;
 use std::time::Duration;
@@ -1867,6 +1868,7 @@ fn cancel_in_progress_retires_live_buf_to_watched() {
 /// being watched so its stale content can't overwrite the fresh
 /// snapshot, and later clicks must go through restore.
 #[test]
+#[serial]
 fn restore_reply_stops_watching_buf() {
     let (eh, probe) = maki_lua::test_support::probed_event_handle();
     let (tx, _rx) = unbounded_channel();
@@ -2158,6 +2160,7 @@ fn restored_row_text_stays_until_a_body_view_lands() {
 }
 
 #[test]
+#[serial]
 fn live_snapshot_uses_panel_generation() {
     let mut panel = MessagesPanel::new(UiConfig::default(), EventHandle::disconnected_for_test());
     panel.tool_start(start("t1", BASH_TOOL_NAME));
@@ -2802,6 +2805,7 @@ fn drain_highlight_worker(panel: &mut MessagesPanel) {
 /// wiring: drop `theme_gen` at a call site and the old palette gets spliced
 /// straight back in with no test to catch it.
 #[test]
+#[serial]
 fn theme_switch_repaints_highlighted_code() {
     theme::set(theme::load_by_name("dracula").unwrap());
     let mut panel = MessagesPanel::new(UiConfig::default(), EventHandle::disconnected_for_test());
@@ -2836,6 +2840,7 @@ fn theme_switch_repaints_highlighted_code() {
         code_span_styles(&panel, "t1"),
         "a theme switch must re-highlight, not splice old-palette lines back"
     );
+    theme::reset_to_default();
 }
 
 const FIRST_TEXT: &str = "run the migration";
@@ -2879,6 +2884,7 @@ user_bg = { bg = "surface" }
 "##;
 
 #[test]
+#[serial]
 fn user_message_uses_user_bg_and_user_text() {
     crate::theme::set(Theme::from_toml(USER_BG_THEME).unwrap());
     let mut panel = MessagesPanel::new(UiConfig::default(), EventHandle::disconnected_for_test());
@@ -2900,6 +2906,7 @@ fn user_message_uses_user_bg_and_user_text() {
     assert_eq!(style_of(&terminal, "reply").fg, Some(assistant_fg));
     let reply_row = row_of(&terminal, "reply");
     assert_ne!(buf.cell((VIEW_WIDTH - 2, reply_row)).unwrap().bg, user_bg);
+    theme::reset_to_default();
 }
 
 /// `Chat::mark_finished` corrects a bubble long after it was drawn, with the
@@ -3408,6 +3415,7 @@ fn notice_without_detail_does_not_toggle() {
 }
 
 #[test]
+#[serial]
 fn scrollbar_sits_on_the_theme_window_background() {
     let dracula = crate::BUNDLED_THEMES
         .iter()
@@ -3441,6 +3449,7 @@ fn scrollbar_sits_on_the_theme_window_background() {
             "the scrollbar column must sit on the theme bg, not the terminal's"
         );
     }
+    theme::reset_to_default();
 }
 const GUTTER_TEST_WIDTH: u16 = 40;
 const GUTTER_TEST_HEIGHT: u16 = 12;
