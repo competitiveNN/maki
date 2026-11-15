@@ -28,7 +28,7 @@ pub mod splash;
 mod storage_writer;
 mod text_buffer;
 mod theme;
-mod truncate;
+pub mod truncate;
 mod trust_card;
 mod tty_probe;
 pub use theme::BUNDLED_THEMES;

@@ -13,7 +13,7 @@ use unicode_width::UnicodeWidthStr;
 ///
 /// The cut lands on a grapheme boundary. The boolean is `true` when all of
 /// `text` fit, so callers can skip appending an ellipsis.
-pub(crate) fn head_fitting(text: &str, max_width: usize) -> (&str, bool) {
+pub fn head_fitting(text: &str, max_width: usize) -> (&str, bool) {
     if text.width() <= max_width {
         return (text, true);
     }
@@ -34,7 +34,7 @@ pub(crate) fn head_fitting(text: &str, max_width: usize) -> (&str, bool) {
 ///
 /// The cut lands on a grapheme boundary. The boolean is `true` when all of
 /// `text` fit, so callers can skip prepending an ellipsis.
-pub(crate) fn tail_fitting(text: &str, max_width: usize) -> (&str, bool) {
+pub fn tail_fitting(text: &str, max_width: usize) -> (&str, bool) {
     if text.width() <= max_width {
         return (text, true);
     }

@@ -80,5 +80,9 @@ harness = false
 name = "streaming"
 harness = false
 
+[[bench]]
+name = "truncate"
+harness = false
+
 [lints]
 workspace = true
