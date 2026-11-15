@@ -297,46 +297,12 @@ impl App {
                 // Text-style is single-width and more compatible with terminal rendering.
                 let indicator = if in_use { "🖥" } else { "💤" };
                 let style = theme::current().input_placeholder;
-                // Char-boundary-safe truncation: limit the title to fit within
-                // the available border width, using grapheme-aware truncation.
-                let available = layout.input_area.width as usize;
                 // Indicator takes ~3-4 cells (" 🖥 " or " 💤 "), plus a trailing space
                 // for the title. Leave at least 2 cells for the border corners.
+                let available = layout.input_area.width as usize;
                 let indicator_width = format!(" {indicator} ").width();
                 let max_title = available.saturating_sub(indicator_width).saturating_sub(2);
-                let truncated_title = if title.width() > max_title && max_title > 2 {
-                    // Truncate at grapheme boundaries, keeping the end of the title
-                    // (which is more useful for distinguishing sessions).
-                    use unicode_segmentation::UnicodeSegmentation;
-                    let mut width = 0;
-                    let chars: Vec<&str> = title.graphemes(true).collect();
-                    // Walk from the end to keep the tail of the title
-                    let mut i = chars.len();
-                    while i > 0 {
-                        let g = chars[i - 1];
-                        let g_width = g.width();
-                        if width + g_width + 1 > max_title {
-                            // +1 for ellipsis
-                            break;
-                        }
-                        width += g_width;
-                        i -= 1;
-                    }
-                    if i == 0 {
-                        // Title fits entirely
-                        title.to_string()
-                    } else {
-                        // Prepend ellipsis to indicate truncation
-                        let mut s = String::from("…");
-                        s.push_str(&chars[i..].concat());
-                        s
-                    }
-                } else if title.width() > max_title {
-                    // Very narrow: just show the indicator
-                    String::new()
-                } else {
-                    title.to_string()
-                };
+                let truncated_title = truncate_title_tail(title, max_title);
                 let mut spans = vec![Span::styled(format!(" {indicator} "), style)];
                 if !truncated_title.is_empty() {
                     spans.push(Span::styled(format!("{truncated_title} "), style));
@@ -608,5 +574,99 @@ impl App {
             .map(|(text, style_name)| Span::styled(text.clone(), theme::style_by_name(style_name)))
             .collect();
         (!spans.is_empty()).then(|| Line::from(spans))
+    }
+}
+
+/// Truncates a session title to at most `max_width` display cells, keeping the
+/// tail (the most distinguishing part) and prefixing an ellipsis to mark the
+/// cut. Truncation walks grapheme clusters rather than bytes or chars, so
+/// multi-codepoint emoji (ZWJ sequences, variation selectors) are never split
+/// and the result is always a valid UTF-8 string.
+fn truncate_title_tail(title: &str, max_width: usize) -> String {
+    use unicode_segmentation::UnicodeSegmentation;
+    use unicode_width::UnicodeWidthStr;
+
+    if title.width() <= max_width {
+        return title.to_string();
+    }
+    if max_width == 0 {
+        return String::new();
+    }
+    // Reserve one cell for the ellipsis; only cells left over hold title text.
+    let budget = max_width.saturating_sub(1);
+    let graphemes: Vec<&str> = title.graphemes(true).collect();
+    let mut width = 0usize;
+    let mut start = graphemes.len();
+    while start > 0 {
+        let g_width = graphemes[start - 1].width();
+        if width + g_width > budget {
+            break;
+        }
+        width += g_width;
+        start -= 1;
+    }
+    if start == graphemes.len() {
+        // Not even one grapheme fits once the ellipsis is accounted for.
+        return String::new();
+    }
+    let mut out = String::from('\u{2026}');
+    out.push_str(&graphemes[start..].concat());
+    out
+}
+
+#[cfg(test)]
+mod tests {
+    use super::truncate_title_tail;
+
+    #[test]
+    fn a_title_that_fits_is_untouched() {
+        assert_eq!(truncate_title_tail("short", 10), "short");
+        assert_eq!(truncate_title_tail("exact", 5), "exact");
+    }
+
+    #[test]
+    fn a_long_ascii_title_keeps_its_tail_behind_an_ellipsis() {
+        let out = truncate_title_tail("hello world", 7);
+        assert_eq!(out, "\u{2026} world");
+        assert!(out.chars().count() <= 7);
+    }
+
+    #[test]
+    fn multibyte_titles_are_cut_on_char_boundaries() {
+        let title = "session-τεστ-emoji";
+        let out = truncate_title_tail(title, 6);
+        assert!(out.starts_with('\u{2026}'));
+        // Never panics and never exceeds the budget in display cells.
+        assert!(unicode_width::UnicodeWidthStr::width(out.as_str()) <= 6);
+    }
+
+    #[test]
+    fn zwj_and_variation_selector_graphemes_are_never_split() {
+        // Family emoji is a single grapheme cluster built from several code
+        // points joined by ZWJ; VS16 turns a text symbol into color emoji.
+        for title in [
+            "family \u{1f468}\u{200d}\u{1f469}\u{200d}\u{1f467}",
+            "warn \u{26a0}\u{fe0f}",
+        ] {
+            for max in 1..=12 {
+                let out = truncate_title_tail(title, max);
+                // The output must be valid, and re-parsing it must yield the
+                // same graphemes (no dangling joiners or selectors).
+                let reparsed: String = out.to_string();
+                assert_eq!(reparsed, out);
+                assert!(unicode_width::UnicodeWidthStr::width(out.as_str()) <= max);
+            }
+        }
+    }
+
+    #[test]
+    fn very_narrow_widths_degrade_gracefully() {
+        assert_eq!(truncate_title_tail("anything", 0), "");
+        assert_eq!(truncate_title_tail("anything", 1), "");
+        // One cell for the ellipsis, one for the trailing grapheme.
+        assert_eq!(
+            truncate_title_tail("\u{1f468}\u{1f469}", 3),
+            "\u{2026}\u{1f469}"
+        );
     }
 }
