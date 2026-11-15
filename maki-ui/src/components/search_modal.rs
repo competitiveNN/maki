@@ -7,6 +7,7 @@ use crate::components::scrollbar::render_vertical_scrollbar;
 use crate::components::{Overlay, render_field};
 use crate::text_buffer::TextBuffer;
 use crate::theme;
+use crate::truncate::head_fitting;
 use crossterm::event::{KeyCode, KeyEvent};
 use nucleo_matcher::pattern::{Atom, AtomKind, CaseMatching, Normalization};
 use nucleo_matcher::{Config, Matcher, Utf32Str};
@@ -323,7 +324,12 @@ fn build_highlighted_line<'a>(
     let mut current_highlighted = false;
     let mut run = String::new();
 
-    for (char_pos, ch) in text.chars().enumerate().take(max_width) {
+    // Truncate by display width, not character count, so wide characters
+    // (CJK, emoji) are handled correctly and never split.
+    let (truncated, _) = head_fitting(text, max_width);
+    let char_limit = truncated.chars().count();
+
+    for (char_pos, ch) in text.chars().enumerate().take(char_limit) {
         let is_match = index_set.contains(&(char_pos as u32));
 
         if is_match != current_highlighted && !run.is_empty() {
