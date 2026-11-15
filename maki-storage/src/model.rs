@@ -41,8 +41,8 @@ pub fn persist_model(dir: &StateDir, spec: &str) {
              ON CONFLICT(key) DO UPDATE SET value = excluded.value",
             params![spec],
         )
-        .map(|_| ())
-        .map_err(StorageError::from)
+        .map(|_| ())?;
+        Ok(())
     });
 }
 
@@ -71,8 +71,8 @@ pub fn persist_thinking(dir: &StateDir, thinking: StoredThinking) {
              ON CONFLICT(key) DO UPDATE SET value = excluded.value",
             params![thinking.to_string()],
         )
-        .map(|_| ())
-        .map_err(StorageError::from)
+        .map(|_| ())?;
+        Ok(())
     });
 }
 
