@@ -339,7 +339,7 @@ impl CommandPalette {
         mcp_prompts: &[McpPromptInfo],
         lua_commands: &[LuaCommandInfo],
     ) -> Nucleo<CommandItem> {
-        let nucleo = Nucleo::new(Config::DEFAULT, Arc::new(|| {}), None, 1);
+        let nucleo = Nucleo::new(Config::DEFAULT, Arc::new(|| {}), Some(2), 1);
         let injector = nucleo.injector();
 
         for item in Self::items(custom_commands, mcp_prompts, lua_commands) {

@@ -151,7 +151,7 @@ impl FilePickerModal {
     pub fn new() -> Self {
         let notify = Arc::new(|| {});
         Self {
-            nucleo: Nucleo::new(FILE_MATCH_CONFIG, notify, None, 1),
+            nucleo: Nucleo::new(FILE_MATCH_CONFIG, notify, Some(2), 1),
             matcher: Matcher::new(FILE_MATCH_CONFIG),
             session: None,
         }
