@@ -252,6 +252,11 @@ inventory::collect!(BuiltInProvider);
 /// `inventory`, so they live here and every lookup checks both.
 static REGISTERED: RwLock<Vec<&'static BuiltInProvider>> = RwLock::new(Vec::new());
 
+/// Clears the runtime-registered providers. Only for tests.
+pub fn clear_registered_providers() {
+    *REGISTERED.write().unwrap_or_else(|e| e.into_inner()) = Vec::new();
+}
+
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct OverrideFields {

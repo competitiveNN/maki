@@ -9,6 +9,7 @@ use crate::theme;
 
 use maki_config::ThinkingLines;
 
+use crate::repaint::{Cadence, Dirty};
 use crossterm::event::{KeyCode, KeyEvent};
 use ratatui::Frame;
 use ratatui::layout::Rect;
@@ -16,7 +17,8 @@ use ratatui::text::{Line, Span};
 use ratatui::widgets::{Paragraph, Wrap};
 use tokio::sync::mpsc::Receiver;
 
-use crate::repaint::{Cadence, Dirty};
+#[cfg(test)]
+use serial_test::serial;
 
 const TITLE: &str = " /btw ";
 const H_PAD: u16 = 2;
@@ -484,6 +486,7 @@ mod tests {
     /// The modal is built once at startup and lives through every theme switch,
     /// so the streams have to be handed the new colours before they repaint.
     #[test]
+    #[serial]
     fn theme_switch_repaints_the_streams() {
         theme::set(theme::load_by_name(THEME_A).expect(THEME_A));
         let mut m = modal();
@@ -498,5 +501,6 @@ mod tests {
             stream_styles(&mut m),
             "a theme switch must restyle the body, not keep the startup palette"
         );
+        theme::reset_to_default();
     }
 }

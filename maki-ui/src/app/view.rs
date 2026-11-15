@@ -288,13 +288,58 @@ impl App {
                 .or_else(|| self.lua_hint_line());
             // Build the top-right border hint from a single snapshot so the
             // indicator and session title are composed consistently for this frame.
+            // Use text-style emoji (without variation selector) for the computer
+            // indicator to avoid rendering issues with VS16 on some terminals.
             let top_right_hint = panel_hint.or_else(|| {
+                use unicode_width::UnicodeWidthStr;
                 let (in_use, title) = (self.computer_in_use, self.state.session.title.as_str());
-                let indicator = if in_use { "🖥️" } else { "💤" };
+                // "🖥" (U+1F5A5) is text-style; "🖥️" adds VS16 (U+FE0F) for color emoji.
+                // Text-style is single-width and more compatible with terminal rendering.
+                let indicator = if in_use { "🖥" } else { "💤" };
                 let style = theme::current().input_placeholder;
+                // Char-boundary-safe truncation: limit the title to fit within
+                // the available border width, using grapheme-aware truncation.
+                let available = layout.input_area.width as usize;
+                // Indicator takes ~3-4 cells (" 🖥 " or " 💤 "), plus a trailing space
+                // for the title. Leave at least 2 cells for the border corners.
+                let indicator_width = format!(" {indicator} ").width();
+                let max_title = available.saturating_sub(indicator_width).saturating_sub(2);
+                let truncated_title = if title.width() > max_title && max_title > 2 {
+                    // Truncate at grapheme boundaries, keeping the end of the title
+                    // (which is more useful for distinguishing sessions).
+                    use unicode_segmentation::UnicodeSegmentation;
+                    let mut width = 0;
+                    let chars: Vec<&str> = title.graphemes(true).collect();
+                    // Walk from the end to keep the tail of the title
+                    let mut i = chars.len();
+                    while i > 0 {
+                        let g = chars[i - 1];
+                        let g_width = g.width();
+                        if width + g_width + 1 > max_title {
+                            // +1 for ellipsis
+                            break;
+                        }
+                        width += g_width;
+                        i -= 1;
+                    }
+                    if i == 0 {
+                        // Title fits entirely
+                        title.to_string()
+                    } else {
+                        // Prepend ellipsis to indicate truncation
+                        let mut s = String::from("…");
+                        s.push_str(&chars[i..].concat());
+                        s
+                    }
+                } else if title.width() > max_title {
+                    // Very narrow: just show the indicator
+                    String::new()
+                } else {
+                    title.to_string()
+                };
                 let mut spans = vec![Span::styled(format!(" {indicator} "), style)];
-                if !title.is_empty() {
-                    spans.push(Span::styled(format!("{title} "), style));
+                if !truncated_title.is_empty() {
+                    spans.push(Span::styled(format!("{truncated_title} "), style));
                 }
                 Some(Line::from(spans))
             });

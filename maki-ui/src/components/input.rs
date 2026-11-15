@@ -10,21 +10,22 @@ use self::layout::{Layout, Piece, Row};
 use crate::text_buffer::{EditResult, Mark, Marks, Prompt, TextBuffer, Writers, is_newline_key};
 use crate::theme;
 
+use super::apply_scroll_delta;
+use super::scrollbar::render_vertical_scrollbar;
+use crate::selection::ScreenSelection;
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use maki_lua::{InputMarks, InputMode, TextEdit};
-use maki_storage::input_history::InputHistory;
-use std::mem;
-
 use maki_providers::ImageSource;
+use maki_storage::input_history::InputHistory;
 use ratatui::Frame;
 use ratatui::layout::{Position, Rect};
 use ratatui::style::{Modifier, Style};
 use ratatui::text::{Line, Span, Text};
 use ratatui::widgets::{Block, BorderType, Borders, Paragraph};
+use std::mem;
 
-use super::apply_scroll_delta;
-use super::scrollbar::render_vertical_scrollbar;
-use crate::selection::ScreenSelection;
+#[cfg(test)]
+use serial_test::serial;
 
 const CHEVRON: &str = super::CHEVRON;
 const NEWLINE_PAD: &str = "  ";
@@ -2071,6 +2072,7 @@ mod tests {
     #[test_case("!! "           ; "double_bang_and_space")]
     #[test_case("!\nls"         ; "bang_then_command_on_the_next_line")]
     #[test_case("ls\n!ls"       ; "bang_on_a_later_line")]
+    #[serial]
     fn a_shell_prompt_draws_like_parse_shell_prefix_reads_it(text: &str) {
         crate::highlight::warmup();
         let first_line = text.split('\n').next().unwrap();
@@ -2377,6 +2379,7 @@ mod tests {
     /// range's text again until an edit lands inside it.
     #[test_case(false ; "an_edit_above_it_moves_its_colors")]
     #[test_case(true  ; "an_edit_inside_it_colors_it_again")]
+    #[serial]
     fn a_long_range_is_colored_again_only_when_an_edit_touches_it(inside: bool) {
         let mut input = commented(LONG_FILLER);
         assert!(!colored_whole(&mut input));
@@ -2398,6 +2401,7 @@ mod tests {
     /// the worker again until some other redraw.
     #[test_case(false ; "an_edit_above_it_moves_them")]
     #[test_case(true  ; "an_edit_inside_it_drops_them")]
+    #[serial]
     fn colors_from_the_worker_land_on_the_text_now(inside: bool) {
         let mut input = commented(LONG_FILLER);
         assert!(!colored_whole(&mut input));
@@ -2410,5 +2414,61 @@ mod tests {
         assert_eq!(decor_worker::run_queued(), usize::from(inside));
         input.poll_decor();
         assert!(colored_whole(&mut input));
+    }
+
+    /// Regression test: top-right hint with multi-byte/emoji title renders
+    /// without garbling in a narrow input box.
+    #[test]
+    fn top_right_hint_multibyte_title_narrow_width() {
+        let mut input = InputBox::new(InputHistory::default(), 20);
+        let border_style = Style::new().fg(theme::current().mode_build);
+        let width = 20_u16;
+        let height = 3_u16;
+        let backend = ratatui::backend::TestBackend::new(width, height);
+        let mut terminal = ratatui::Terminal::new(backend).unwrap();
+        // Title with multi-byte chars and emoji (wide characters)
+        let hint = Line::from(vec![
+            Span::styled(" \u{1f5a5} ", theme::current().input_placeholder),
+            Span::styled(
+                "session-\u{03c4}\u{03b5}\u{03c3}\u{03c4}-\u{1f600}-title ",
+                theme::current().input_placeholder,
+            ),
+        ]);
+        terminal
+            .draw(|frame| {
+                let area = Rect::new(0, 0, width, height);
+                let _ = input.view(frame, area, Placeholder::Blank, border_style, Some(hint));
+            })
+            .unwrap();
+        // Verify the top border was rendered (no panic)
+        let buf = terminal.backend().buffer();
+        assert!(buf.area.width == width);
+    }
+
+    /// Regression test: repeated frames with the same title don't garble.
+    #[test]
+    fn top_right_hint_repeated_frames() {
+        let mut input = InputBox::new(InputHistory::default(), 20);
+        let border_style = Style::new().fg(theme::current().mode_build);
+        let width = 30_u16;
+        let height = 3_u16;
+        let title = "My Session \u{1f389}";
+        for _ in 0..5 {
+            let backend = ratatui::backend::TestBackend::new(width, height);
+            let mut terminal = ratatui::Terminal::new(backend).unwrap();
+            let hint = Line::from(vec![
+                Span::styled(" \u{1f4a4} ", theme::current().input_placeholder),
+                Span::styled(format!("{title} "), theme::current().input_placeholder),
+            ]);
+            terminal
+                .draw(|frame| {
+                    let area = Rect::new(0, 0, width, height);
+                    let _ = input.view(frame, area, Placeholder::Blank, border_style, Some(hint));
+                })
+                .unwrap();
+            // Verify no panic and border is rendered
+            let buf = terminal.backend().buffer();
+            assert!(buf.area.width == width);
+        }
     }
 }

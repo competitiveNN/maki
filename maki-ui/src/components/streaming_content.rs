@@ -4,8 +4,11 @@ use crate::markdown::paint_semantic;
 use crate::theme;
 
 use maki_markdown::render::Renderer;
+
 use ratatui::style::Style;
 use ratatui::text::Line;
+#[cfg(test)]
+use serial_test::serial;
 use std::hash::{DefaultHasher, Hash, Hasher};
 
 const STREAMING_MAX_LINE_BYTES: usize = 5_000;
@@ -281,6 +284,7 @@ mod tests {
     /// `clear` paints the previous message's code inside the next one.
     #[test_case(true  ; "take_all")]
     #[test_case(false ; "clear")]
+    #[serial]
     fn renderer_resets_between_messages(via_take_all: bool) {
         // The default syntect theme paints every scope the same colour, so
         // without a real one a leaked language would not show up in the styles.
@@ -303,6 +307,7 @@ mod tests {
             reused, expected,
             "second message must not inherit the first message's highlighter state"
         );
+        theme::reset_to_default();
     }
 
     /// `StreamingCache` keys on `theme::generation()` while the renderer inside
@@ -310,6 +315,7 @@ mod tests {
     /// because `theme::set` refreshes the syntax theme, and if that coupling
     /// breaks, unchanged text keeps the old palette forever.
     #[test]
+    #[serial]
     fn theme_change_repaints_identical_text() {
         let style = Style::default();
         let mut cache = StreamingCache::default();
@@ -329,6 +335,7 @@ mod tests {
             "only the palette changed, the text must not"
         );
         assert_ne!(cache.lines, before, "the repaint must use the new palette");
+        theme::reset_to_default();
     }
 
     #[test_case(

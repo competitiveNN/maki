@@ -58,6 +58,7 @@ test-case = { workspace = true }
 tempfile = { workspace = true }
 criterion = { workspace = true }
 fastrand = { workspace = true }
+serial_test = { workspace = true }
 
 [[bench]]
 name = "splash"

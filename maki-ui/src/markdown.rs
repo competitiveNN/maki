@@ -7,6 +7,9 @@ use maki_markdown::render::{self, Line as RLine, LineKind, Span as RSpan, StyleT
 use ratatui::style::{Modifier, Style};
 use ratatui::text::{Line, Span};
 
+#[cfg(test)]
+use serial_test::serial;
+
 pub const TRUNCATION_PREFIX: &str = "...";
 pub const EXPAND_HINT: &str = "click to expand";
 pub(crate) const MIN_TRUNCATABLE_LINES: usize = 2;
@@ -578,6 +581,7 @@ mod tests {
     /// on either axis leaves wrong colours, or another width's line breaks, on
     /// screen for the rest of the session.
     #[test]
+    #[serial]
     fn the_code_memo_follows_the_theme_and_ignores_the_width() {
         const WIDTHS: [u16; 3] = [NARROW_WIDTH, TEST_WIDTH, WIDE_WIDTH];
         theme::set(theme::load_by_name(THEME_A).expect(THEME_A));
@@ -603,6 +607,7 @@ mod tests {
             under_a,
             "a warm memo must restore every width exactly as it first rendered"
         );
+        theme::reset_to_default();
     }
 
     #[test]

@@ -3,9 +3,12 @@ use crate::markdown::{should_truncate, truncation_notice};
 use crate::theme;
 
 use maki_agent::diff::{DiffLine, DiffSpan, compute_hunks};
+
 use maki_agent::{GrepFileEntry, InstructionBlock, ToolInput, ToolOutput};
 use ratatui::style::Style;
 use ratatui::text::{Line, Span};
+#[cfg(test)]
+use serial_test::serial;
 use syntect::parsing::SyntaxReference;
 use syntect::util::LinesWithEndings;
 
@@ -649,6 +652,7 @@ mod tests {
     /// Context lines inside a block comment must carry the full-file parser
     /// state, not a fresh one from the hunk start.
     #[test]
+    #[serial]
     fn diff_context_line_inside_block_comment_matches_full_file_state() {
         let before = "/*\nalpha\nbravo\ncharlie\ndelta\necho\nfoxtrot\nOLD\ngolf\n*/\n";
         let after = "/*\nalpha\nbravo\ncharlie\ndelta\necho\nfoxtrot\nNEW\ngolf\n*/\n";
@@ -666,6 +670,7 @@ mod tests {
     /// When an edit removes `*/`, formerly-code lines become comment.
     /// Unchanged context lines must use the AFTER parser state.
     #[test]
+    #[serial]
     fn diff_unchanged_line_uses_after_state_when_close_tag_removed() {
         let before = "/*\ndoc\n*/\nfn x() {}\n";
         let after = "/*\ndoc\nfn x() {}\n";
@@ -766,6 +771,7 @@ diff_new_line_nr = { fg = "new_nr" }
 "##;
 
     #[test]
+    #[serial]
     fn render_diff_wires_dedicated_sign_and_line_nr_styles() {
         theme::set(theme::Theme::from_toml(DIFF_GUTTER_TEST_THEME).expect("theme must parse"));
 
@@ -791,6 +797,7 @@ diff_new_line_nr = { fg = "new_nr" }
         assert_eq!(added.spans[0].style.fg, new_nr_fg);
         assert_eq!(added.spans[1].content.as_ref(), "+ ");
         assert_eq!(added.spans[1].style.fg, new_sign_fg);
+        theme::reset_to_default();
     }
 
     fn grep_entries(files: &[(&str, &[usize])]) -> Vec<GrepFileEntry> {

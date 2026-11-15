@@ -13,20 +13,21 @@ use std::ops::Range;
 use std::sync::Arc;
 use std::time::Instant;
 
-use unicode_width::UnicodeWidthStr;
-
+use crate::markdown::{should_truncate, text_to_lines, truncate_output, truncation_notice};
 use jiff::Timestamp;
 use jiff::tz::TimeZone;
-
-use crate::markdown::{should_truncate, text_to_lines, truncate_output, truncation_notice};
 use maki_agent::tools::is_timeout_annotation;
 use maki_agent::{
     BufferSnapshot, InstructionBlock, SnapshotSpan, SpanColor, SpanStyle, ToolInput, ToolOutput,
 };
 use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
+use unicode_width::UnicodeWidthStr;
 
 use crate::render_worker::RenderWorker;
+
+#[cfg(test)]
+use serial_test::serial;
 
 pub struct RenderCtx<'a> {
     pub started_at: Instant,
@@ -1056,6 +1057,7 @@ pub fn build_instructions_lines(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use unicode_width::UnicodeWidthStr;
 
     const TOL: ToolOutputLines = ToolOutputLines::DEFAULT;
     use crate::components::{DisplayRole, ToolRole};
@@ -2151,12 +2153,14 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn default_span_resolves_to_theme_tool() {
         theme::set(theme::load_by_name("dracula").expect("dracula theme"));
         assert_eq!(
             resolve_span_style(&SpanStyle::Default),
             theme::current().tool
         );
+        theme::reset_to_default();
     }
 
     #[test]

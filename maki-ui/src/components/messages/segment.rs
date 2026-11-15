@@ -14,6 +14,9 @@ use std::mem;
 use std::ops::Range;
 use std::time::Duration;
 
+#[cfg(test)]
+use serial_test::serial;
+
 const INST_SUFFIX: &str = "__inst";
 const ELAPSED_STEP: Duration = Duration::from_secs(1);
 
@@ -521,6 +524,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn reuse_highlight_keys_on_theme_not_width() {
         use crate::components::code_view::RenderLimits;
         use maki_agent::ToolOutput;
@@ -568,6 +572,7 @@ mod tests {
             seg.reuse_highlight(&key(), (1, 3)).is_none(),
             "theme mismatch must force a fresh highlight, not splice old-palette lines"
         );
+        theme::reset_to_default();
     }
 
     fn ticking_since(ago: Duration, shown_secs: u64) -> Segment {
