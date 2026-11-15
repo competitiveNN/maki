@@ -413,7 +413,7 @@ impl Splash {
         let theme = theme::current();
         let bg = theme.background;
 
-        let logo_x = area.x + (area.width.saturating_sub(LOGO.len() as u16)) / 2;
+        let logo_x = area.x + (area.width.saturating_sub(LOGO.width() as u16)) / 2;
         let alpha =
             LOGO_ALPHA * ease_out_cubic(((t - LOGO_DELAY) / LOGO_RAMP).clamp(0.0, 1.0)) * fade;
         let lifted = match accent {

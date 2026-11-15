@@ -32,6 +32,7 @@ use crate::theme;
 use crate::update;
 use maki_config::{ClockFormat, ThinkingLines, ToolOutputLines, UiConfig};
 use ratatui_image::picker::Picker;
+use unicode_width::UnicodeWidthStr;
 
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::mem;
@@ -1087,7 +1088,7 @@ impl MessagesPanel {
             let ratio = pp.processed as f64 / pp.total as f64;
             let bar_width = (width as f64 * 0.1).round() as u16;
             let label = " Processing ";
-            let label_width = label.len() as u16;
+            let label_width = label.width() as u16;
             let total_width = label_width + bar_width;
             let bar_x = area.x + width.saturating_sub(total_width);
             let bar_y = area.y + area.height.saturating_sub(1);
