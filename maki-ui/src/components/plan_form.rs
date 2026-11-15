@@ -9,7 +9,9 @@ use ratatui::Frame;
 use ratatui::layout::Rect;
 use ratatui::style::Style;
 use ratatui::text::{Line, Span};
-use unicode_width::{UnicodeWidthChar, UnicodeWidthStr};
+use unicode_width::UnicodeWidthStr;
+
+use crate::truncate::head_fitting;
 
 const FORM_LABEL: &str = " Plan complete ";
 
@@ -354,14 +356,8 @@ fn fit(spans: Vec<Span<'static>>, width: usize) -> Line<'static> {
             continue;
         }
         let mut cut = String::with_capacity(span.content.len());
-        for ch in span.content.chars() {
-            let char_width = ch.width().unwrap_or(0);
-            if used + char_width > budget {
-                break;
-            }
-            used += char_width;
-            cut.push(ch);
-        }
+        let (head, _) = head_fitting(&span.content, budget.saturating_sub(used));
+        cut.push_str(head);
         out.push(Span::styled(cut, span.style));
         break;
     }
@@ -755,5 +751,23 @@ mod tests {
             line.spans.last().map(|s| s.content.as_ref()) == Some(ELLIPSIS),
             cut
         );
+    }
+
+    /// Cutting a row backs up to a grapheme boundary, so a ZWJ cluster is
+    /// dropped whole rather than split in front of the ellipsis.
+    #[test]
+    fn a_cut_row_never_splits_a_grapheme() {
+        let family = "\u{1f468}\u{200d}\u{1f469}\u{200d}\u{1f467}";
+        let spans = || vec![Span::raw("ab"), Span::raw(format!("{family}cdef"))];
+        let min = unicode_width::UnicodeWidthStr::width(ELLIPSIS);
+        for width in min..=12 {
+            let line = fit(spans(), width);
+            assert!(line.width() <= width, "over {width}");
+            let text: String = line.spans.iter().map(|s| s.content.as_ref()).collect();
+            assert!(
+                !text.contains('\u{200d}') || text.contains(family),
+                "split at {width}: {text:?}"
+            );
+        }
     }
 }
