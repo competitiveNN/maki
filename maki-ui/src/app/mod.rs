@@ -63,8 +63,8 @@ use crate::selection::{SelectionState, SelectionZone, ZoneRegistry};
 use crate::text_buffer::{RuleSet, TextBuffer, Writers, normalize_line_endings, sanitize};
 use arc_swap::ArcSwapOption;
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers, MouseEvent};
+use maki_agent::live_session::set_computer_in_use;
 use maki_agent::permissions::{PermissionManager, TaggedAnswer};
-use maki_agent::live_session::{set_computer_in_use};
 use maki_agent::{
     AgentEvent, Envelope, McpConfigErrors, McpSnapshotReader, SessionMailbox, SharedBuf,
     SharedMessages, ToolPart,
@@ -1812,7 +1812,11 @@ impl App {
             BuiltinAction::ToggleComputerInUse => {
                 self.computer_in_use = !self.computer_in_use;
                 set_computer_in_use(self.computer_in_use);
-                let state = if self.computer_in_use { "in use" } else { "not in use" };
+                let state = if self.computer_in_use {
+                    "in use"
+                } else {
+                    "not in use"
+                };
                 self.flash(format!("Computer is now {}", state));
                 true
             }

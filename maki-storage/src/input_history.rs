@@ -56,7 +56,8 @@ impl InputHistory {
         });
         if let Ok(rows) = pool.with_read(|db| {
             let mut stmt = db.prepare("SELECT value FROM entries ORDER BY seq")?;
-            let rows: Vec<String> = stmt.query_map([], |row| row.get::<_, String>(0))?
+            let rows: Vec<String> = stmt
+                .query_map([], |row| row.get::<_, String>(0))?
                 .collect::<Result<Vec<_>, _>>()?;
             Ok(rows)
         }) {
@@ -292,6 +293,5 @@ mod tests {
         let pool = get_pool(&history_path(&dir, &cwd)).unwrap();
         let mode = pool.with_read(|d| d.journal_mode()).unwrap();
         assert_eq!(mode.to_lowercase(), "wal");
-
     }
 }
