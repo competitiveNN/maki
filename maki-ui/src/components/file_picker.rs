@@ -101,11 +101,8 @@ struct Match {
     indices: Vec<u32>,
 }
 
-struct Session {
-    /// Carries the original path as item data, because the matcher column it
-    /// is scored through cannot give it back (see [`Match::path`]).
-    nucleo: Nucleo<String>,
-    matcher: Matcher,
+/// Per-session state for the file picker, excluding the reusable nucleo/matcher.
+struct SessionState {
     matches: Vec<Match>,
     total_matches: u32,
 
@@ -143,16 +140,29 @@ struct Session {
 }
 
 pub struct FilePickerModal {
-    session: Option<Session>,
+    /// Reused across opens to avoid creating/destroying nucleo worker threads.
+    nucleo: Nucleo<String>,
+    matcher: Matcher,
+    /// Per-session state that is reset on each open.
+    session: Option<SessionState>,
 }
 
 impl FilePickerModal {
     pub fn new() -> Self {
-        Self { session: None }
+        let notify = Arc::new(|| {});
+        Self {
+            nucleo: Nucleo::new(FILE_MATCH_CONFIG, notify, None, 1),
+            matcher: Matcher::new(FILE_MATCH_CONFIG),
+            session: None,
+        }
     }
 
     pub fn open(&mut self, cwd: &str) {
-        self.close();
+        // Restart the nucleo to clear previous items and snapshot,
+        // but keep the worker threads alive.
+        self.nucleo.restart(true);
+        self.matcher = Matcher::new(FILE_MATCH_CONFIG);
+
         let root = Path::new(cwd);
         let index = file_index(root);
         // `Ctrl+S` is the user asking to see the tree as it is now, and the
@@ -161,10 +171,11 @@ impl FilePickerModal {
         // rows the picker opens on are the rows it keeps until the whole new
         // tree is ready to take their place in one go.
         index.rescan();
-        self.session = Some(session(index.reader(), readable(root)));
+        self.session = Some(session_state(index.reader(), readable(root)));
     }
 
     pub fn close(&mut self) {
+        // Keep nucleo and matcher alive for reuse; only clear session state.
         self.session = None;
     }
 
@@ -197,7 +208,7 @@ impl FilePickerModal {
             return;
         };
         s.search.insert_text(text);
-        reparse_pattern(s);
+        reparse_pattern(s, &mut self.nucleo);
     }
 
     pub fn handle_key(&mut self, key: KeyEvent) -> FilePickerModalAction {
@@ -220,7 +231,7 @@ impl FilePickerModal {
             KeyCode::Down => move_selection(s, 1),
             KeyCode::Backspace => {
                 s.search.remove_char();
-                reparse_pattern(s);
+                reparse_pattern(s, &mut self.nucleo);
             }
             KeyCode::Left => s.search.move_left(),
             KeyCode::Right => s.search.move_right(),
@@ -228,7 +239,7 @@ impl FilePickerModal {
             KeyCode::End => s.search.move_end(),
             _ if key::DELETE_WORD.matches(key) => {
                 s.search.remove_word_before_cursor();
-                reparse_pattern(s);
+                reparse_pattern(s, &mut self.nucleo);
             }
             _ if key::SCROLL_HALF_UP.matches(key) => {
                 move_selection(s, -((s.viewport_height / 2).max(1) as isize))
@@ -241,7 +252,7 @@ impl FilePickerModal {
             _ if super::is_ctrl(&key) => {}
             KeyCode::Char(c) => {
                 s.search.push_char(c);
-                reparse_pattern(s);
+                reparse_pattern(s, &mut self.nucleo);
             }
             _ => {}
         }
@@ -271,8 +282,8 @@ impl FilePickerModal {
             return (Dirty::NO, None);
         };
 
-        let walked = pull(s);
-        let status = s.nucleo.tick(0);
+        let walked = pull(s, &mut self.nucleo);
+        let status = self.nucleo.tick(0);
         s.matching = status.running;
         // The title says "scanning…" while walking, so finishing redraws too.
         let mut dirty = Dirty::from(status.changed) | Dirty::from(walked);
@@ -295,7 +306,7 @@ impl FilePickerModal {
         }
 
         if status.changed {
-            refresh_matches(s);
+            refresh_matches(s, &mut self.nucleo, &mut self.matcher);
             restore_selection(s);
             clamp_selection(s);
         }
@@ -381,11 +392,8 @@ fn readable(root: &Path) -> bool {
 }
 
 /// A picker over {index}, hidden until the walk has something to show.
-fn session(index: FileReader, readable: bool) -> Session {
-    let notify = Arc::new(|| {});
-    Session {
-        nucleo: Nucleo::new(FILE_MATCH_CONFIG, notify, None, 1),
-        matcher: Matcher::new(FILE_MATCH_CONFIG),
+fn session_state(index: FileReader, readable: bool) -> SessionState {
+    SessionState {
         matches: Vec::new(),
         total_matches: 0,
         search: TextBuffer::new(String::new()),
@@ -413,7 +421,7 @@ fn session(index: FileReader, readable: bool) -> Session {
 /// cursor carried across that swap pushes an arbitrary suffix of the new list
 /// on top of the old one. The matcher cannot take an item back, so a new
 /// generation has to start the matcher over.
-fn pull(s: &mut Session) -> bool {
+fn pull(s: &mut SessionState, nucleo: &mut Nucleo<String>) -> bool {
     let corpus = s.index.corpus();
     // Two halves of one question: a walk is still owed this picker a list,
     // which is what `Ctrl+S` and a tool writing a file both leave behind, or
@@ -434,11 +442,11 @@ fn pull(s: &mut Session) -> bool {
         // the list would collapse to nothing and grow back a batch a tick
         // while the user is looking at it. The rows on show stay the old
         // ones until the new match run has an answer to put in their place.
-        s.nucleo.restart(false);
+        nucleo.restart(false);
         s.generation = corpus.generation();
         s.injected = 0;
     }
-    let injector = s.nucleo.injector();
+    let injector = nucleo.injector();
     let mut pushed = 0;
     // A batch per tick. A swap starts the cursor over, and a whole corpus
     // pushed in one tick is up to `MAX_ENTRIES` owned paths and haystacks
@@ -470,9 +478,9 @@ fn pull(s: &mut Session) -> bool {
     moved || pushed > 0
 }
 
-fn reparse_pattern(s: &mut Session) {
+fn reparse_pattern(s: &mut SessionState, nucleo: &mut Nucleo<String>) {
     let query = s.search.value();
-    s.nucleo
+    nucleo
         .pattern
         .reparse(0, query, CaseMatching::Smart, Normalization::Smart, false);
     s.selected = 0;
@@ -480,8 +488,8 @@ fn reparse_pattern(s: &mut Session) {
     s.reselect = None;
 }
 
-fn refresh_matches(s: &mut Session) {
-    let snapshot = s.nucleo.snapshot();
+fn refresh_matches(s: &mut SessionState, nucleo: &mut Nucleo<String>, matcher: &mut Matcher) {
+    let snapshot = nucleo.snapshot();
     s.total_matches = snapshot.matched_item_count();
     let count = s.total_matches.min(MAX_MATERIALIZED);
 
@@ -496,7 +504,7 @@ fn refresh_matches(s: &mut Session) {
             indices_buf.clear();
             pattern.column_pattern(0).indices(
                 item.matcher_columns[0].slice(..),
-                &mut s.matcher,
+                matcher,
                 &mut indices_buf,
             );
             mem::take(&mut indices_buf)
@@ -514,7 +522,7 @@ fn refresh_matches(s: &mut Session) {
 /// Puts the selection back on the path a generation swap took it off, once
 /// the rebuilt list has that path again. By name rather than by index: the
 /// new list is a different list, and row N of it is a different file.
-fn restore_selection(s: &mut Session) {
+fn restore_selection(s: &mut SessionState) {
     let Some(path) = s.reselect.take() else {
         return;
     };
@@ -526,7 +534,7 @@ fn restore_selection(s: &mut Session) {
     ensure_visible(s);
 }
 
-fn move_selection(s: &mut Session, delta: isize) {
+fn move_selection(s: &mut SessionState, delta: isize) {
     if s.matches.is_empty() {
         return;
     }
@@ -538,7 +546,7 @@ fn move_selection(s: &mut Session, delta: isize) {
     ensure_visible(s);
 }
 
-fn clamp_selection(s: &mut Session) {
+fn clamp_selection(s: &mut SessionState) {
     if s.matches.is_empty() {
         s.selected = 0;
         s.scroll_offset = 0;
@@ -548,7 +556,7 @@ fn clamp_selection(s: &mut Session) {
     }
 }
 
-fn ensure_visible(s: &mut Session) {
+fn ensure_visible(s: &mut SessionState) {
     let len = s.matches.len();
     if len > s.viewport_height {
         s.scroll_offset = s.scroll_offset.min(len - s.viewport_height);
@@ -563,7 +571,7 @@ fn ensure_visible(s: &mut Session) {
     }
 }
 
-fn render_list(frame: &mut Frame, area: Rect, s: &Session) {
+fn render_list(frame: &mut Frame, area: Rect, s: &SessionState) {
     let t = theme::current();
 
     if s.matches.is_empty() {
@@ -606,7 +614,7 @@ fn render_list(frame: &mut Frame, area: Rect, s: &Session) {
     frame.render_widget(Paragraph::new(lines), area);
 }
 
-fn render_search(frame: &mut Frame, area: Rect, s: &Session) -> Option<Position> {
+fn render_search(frame: &mut Frame, area: Rect, s: &SessionState) -> Option<Position> {
     let t = theme::current();
     let mut prefix = vec![chevron_span()];
     if s.walk == Walk::Running {
@@ -751,7 +759,7 @@ mod tests {
 
     /// Ticks until `ready` holds, collecting the frames owed on the way, or
     /// `None` if the picker never got there.
-    fn tick_until(picker: &mut FilePickerModal, ready: impl Fn(&Session) -> bool) -> Option<Dirty> {
+    fn tick_until(picker: &mut FilePickerModal, ready: impl Fn(&SessionState) -> bool) -> Option<Dirty> {
         let deadline = Instant::now() + CONVERGE_TIMEOUT;
         let mut dirty = Dirty::NO;
         while Instant::now() < deadline {
@@ -783,7 +791,7 @@ mod tests {
     fn readable_picker(readable: bool) -> (FilePickerModal, FileIndex) {
         let index = FileIndex::detached(DETACHED_ROOT);
         let mut picker = FilePickerModal::new();
-        picker.session = Some(session(index.clone().reader(), readable));
+        picker.session = Some(session_state(index.clone().reader(), readable));
         (picker, index)
     }
 
@@ -805,11 +813,11 @@ mod tests {
     /// generation swap until the new match run answers, so a test waiting for
     /// a swap to land has to wait on the rows themselves and not on how many
     /// of them there are.
-    fn in_order(s: &Session) -> Vec<String> {
+    fn in_order(s: &SessionState) -> Vec<String> {
         s.matches.iter().map(|m| m.path.clone()).collect()
     }
 
-    fn sorted(s: &Session) -> Vec<String> {
+    fn sorted(s: &SessionState) -> Vec<String> {
         let mut paths = in_order(s);
         paths.sort();
         paths

@@ -148,7 +148,7 @@ impl DatabasePool {
         F: FnOnce(&mut Database) -> Result<T, StorageError>,
     {
         let mut db = self.inner.lock().map_err(|e| StorageError::Io(std::io::Error::other(e.to_string())))?;
-        f(&mut *db)
+        f(&mut db)
     }
 
     /// Execute a read-only operation (can be parallel with other reads in WAL).
