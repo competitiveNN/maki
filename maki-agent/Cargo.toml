@@ -45,6 +45,7 @@ url = { workspace = true }
 [dev-dependencies]
 test-case = { workspace = true }
 tempfile = { workspace = true }
+ctor = "0.2"
 
 [target.'cfg(unix)'.dependencies]
 rustix = { workspace = true }

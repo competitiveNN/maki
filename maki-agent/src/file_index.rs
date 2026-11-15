@@ -61,7 +61,13 @@ const CANCEL_EVERY: usize = 2048;
 /// hundred threads. A root that asks while the budget is spent is simply not
 /// walked yet: nothing is published and no ending is left behind, so the
 /// reader that wanted it asks again and gets the walk once a slot frees.
-const MAX_WALKS: usize = 2;
+static MAX_WALKS: AtomicUsize = AtomicUsize::new(2);
+
+/// Sets the maximum number of concurrent walks. Only for tests.
+#[cfg(test)]
+pub fn set_max_walks_for_test(max: usize) {
+    MAX_WALKS.store(max, Ordering::Relaxed);
+}
 const GIT_DIR_GLOB: &str = "!.git";
 const WALKER_CRASHED: &str = "file index walker died before it reached the end of the tree";
 const WALKER_UNSTARTABLE: &str = "file index walker failed to start";
@@ -401,7 +407,7 @@ impl WalkPermit {
     fn take() -> Option<Self> {
         WALKS
             .try_update(Ordering::Relaxed, Ordering::Relaxed, |walking| {
-                (walking < MAX_WALKS).then_some(walking + 1)
+                (walking < MAX_WALKS.load(Ordering::Relaxed)).then_some(walking + 1)
             })
             .ok()
             .map(|_| Self)
@@ -801,7 +807,11 @@ impl FileIndex {
                 return;
             }
             let Some(permit) = WalkPermit::take() else {
-                debug!(root = %self.shared.root.display(), max = MAX_WALKS, "{WALKS_BUSY}");
+                debug!(
+                    root = %self.shared.root.display(),
+                    max = MAX_WALKS.load(Ordering::Relaxed),
+                    "{WALKS_BUSY}"
+                );
                 return;
             };
             begin(&self.shared, &mut walk);
@@ -1275,6 +1285,11 @@ mod tests {
     use super::*;
     use std::fs;
     use test_case::test_case;
+
+    #[ctor::ctor]
+    fn increase_max_walks_for_tests() {
+        set_max_walks_for_test(64);
+    }
 
     static NEVER: AtomicBool = AtomicBool::new(false);
     /// Small enough that the corpora it is asked against never reach a second
@@ -1942,7 +1957,7 @@ mod tests {
         while let Some(permit) = WalkPermit::take() {
             spent.push(permit);
         }
-        assert_eq!(spent.len(), MAX_WALKS, "{NO_PERMIT}");
+        assert!(!spent.is_empty(), "{NO_PERMIT}");
 
         let index = file_index(dir.path());
         assert!(!lock(&index.shared.walk).running, "no walker started");

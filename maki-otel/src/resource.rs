@@ -95,7 +95,6 @@ mod tests {
     #[test_case("OTEL_SERVICE_NAME", ENV_NAME; "service_name")]
     #[test_case("OTEL_RESOURCE_ATTRIBUTES", "service.name=billing"; "resource_attributes")]
     fn a_service_the_environment_names_beats_lua(env: &str, raw: &str) {
-        // Sound because nextest runs each test in its own process.
         unsafe { std::env::set_var(env, raw) };
         let resource = build(&TelemetryConfig {
             service_name: Some(LUA_NAME.to_string()),
@@ -106,10 +105,16 @@ mod tests {
             ..TelemetryConfig::default()
         });
         assert_eq!(value(&resource, KEY_SERVICE_NAME), Some(ENV_NAME.into()));
+        unsafe { std::env::remove_var(env) };
     }
 
     #[test]
     fn lua_service_name_beats_lua_attributes() {
+        // Isolate from environment variables that may be set by other tests.
+        unsafe {
+            std::env::remove_var("OTEL_SERVICE_NAME");
+            std::env::remove_var("OTEL_RESOURCE_ATTRIBUTES");
+        }
         let resource = build(&TelemetryConfig {
             service_name: Some(LUA_NAME.to_string()),
             resource_attributes: Some(BTreeMap::from([
