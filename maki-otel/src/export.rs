@@ -662,6 +662,14 @@ mod tests {
         assert_eq!(logs.endpoint.as_deref(), Some(ENDPOINT));
         assert_eq!(logs.timeout, Some(Duration::from_millis(TIMEOUT_MS)));
         assert_eq!(logs.compression, Some(Compression::Gzip));
+        for env in [
+            OTEL_EXPORTER_OTLP_METRICS_PROTOCOL,
+            OTEL_EXPORTER_OTLP_METRICS_ENDPOINT,
+            OTEL_EXPORTER_OTLP_METRICS_TIMEOUT,
+            OTEL_EXPORTER_OTLP_METRICS_COMPRESSION,
+        ] {
+            unsafe { env::remove_var(env) };
+        }
     }
 
     #[test_case(Signal::Metrics, Transport::Http(None); "own_endpoint_variable_drops_it")]
@@ -670,6 +678,7 @@ mod tests {
         isolate_env();
         unsafe { env::set_var(OTEL_EXPORTER_OTLP_METRICS_ENDPOINT, ENDPOINT) };
         assert_eq!(Otlp::new(&lua(GRPC), signal).unwrap().transport, expected);
+        unsafe { env::remove_var(OTEL_EXPORTER_OTLP_METRICS_ENDPOINT) };
     }
 
     /// The SDK reads either header variable, never both.
@@ -687,6 +696,10 @@ mod tests {
             .map(|&(key, value)| (key.to_string(), value.to_string()))
             .collect();
         assert_eq!(otlp.headers, expected);
+        unsafe {
+            env::remove_var(OTEL_EXPORTER_OTLP_HEADERS);
+            env::remove_var(OTEL_EXPORTER_OTLP_METRICS_HEADERS);
+        }
     }
 
     #[test_case("a=1, b = 2 ,=3,c=,d", &[("a", "1"), ("b", "2")]; "skips_what_the_sdk_skips")]
@@ -731,6 +744,7 @@ mod tests {
             ..TelemetryConfig::default()
         };
         assert_eq!(temporality(&config), Ok(expected));
+        unsafe { env::remove_var(OTEL_EXPORTER_OTLP_METRICS_TEMPORALITY_PREFERENCE) };
     }
 
     #[test_case(&[(OTEL_BLRP_SCHEDULE_DELAY, "500")], Ok(Some(500)); "standard_variable")]
@@ -750,6 +764,9 @@ mod tests {
             result.map(|delay| delay.map(|delay| delay.as_millis() as u64)),
             expected.map_err(|key| InvalidSetting::new(key, "0", EXPECTED_INTERVAL))
         );
+        for (key, _) in env {
+            unsafe { env::remove_var(key) };
+        }
     }
 
     #[test_case("http://collector:4317", false, false; "http")]
@@ -859,13 +876,20 @@ mod tests {
     /// telemetry variables go first. Sound because nextest runs each test in
     /// its own process, before any other thread starts.
     fn isolate_env() {
-        for (key, _) in env::vars_os() {
-            if key
-                .to_str()
-                .is_some_and(|key| ENV_PREFIXES.iter().any(|prefix| key.starts_with(prefix)))
-            {
-                unsafe { env::remove_var(key) };
-            }
+        let keys_to_remove: Vec<_> = env::vars_os()
+            .filter_map(|(key, _)| {
+                key.to_str()
+                    .and_then(|k| {
+                        if ENV_PREFIXES.iter().any(|prefix| k.starts_with(prefix)) {
+                            Some(k.to_string())
+                        } else {
+                            None
+                        }
+                    })
+            })
+            .collect();
+        for key in keys_to_remove {
+            unsafe { env::remove_var(key) };
         }
     }
 
