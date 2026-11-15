@@ -1508,6 +1508,17 @@ mod tests {
         single_line("abcdefghij").click_position(area(10), row, col)
     }
 
+    /// A wide char takes two cells, so a click within either lands on the
+    /// char boundary before it, not on a byte or half a char.
+    #[test_case(PREFIX_WIDTH + 1 => Some((0, 1)); "on the first cell of a wide char")]
+    #[test_case(PREFIX_WIDTH + 2 => Some((0, 1)); "on its second cell")]
+    #[test_case(PREFIX_WIDTH + 3 => Some((0, 2)); "on the char after it")]
+    #[test_case(PREFIX_WIDTH + 4 => Some((0, 3)); "past the end of the line")]
+    fn click_position_counts_wide_chars_by_display_width(col: u16) -> Option<(usize, usize)> {
+        // "a漢b": a is one cell, 漢 two, b one, and the chars are 0, 1, 2.
+        single_line("a漢b").click_position(area(20), 0, col)
+    }
+
     /// The cursor sitting just past a full row is drawn on a row of its own,
     /// whoever owns the keyboard, so a click has to count that row too or
     /// every line below it maps one row out.
