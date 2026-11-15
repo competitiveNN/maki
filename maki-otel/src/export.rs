@@ -580,6 +580,7 @@ fn env_value(keys: [&str; 2], accept: impl Fn(&str) -> bool) -> Option<String> {
 mod tests {
     use std::collections::BTreeMap;
 
+    use serial_test::serial;
     use test_case::test_case;
 
     use super::*;
@@ -603,6 +604,7 @@ mod tests {
 
     #[test_case(HTTP_PROTOBUF, "http://collector:4318/v1/metrics"; "http_appends_the_signal_path")]
     #[test_case(GRPC, ENDPOINT; "grpc_uses_it_as_given")]
+    #[serial]
     fn generic_lua_endpoint(protocol: &str, expected: &str) {
         isolate_env();
         let otlp = Otlp::new(&lua(protocol), Signal::Metrics).unwrap();
@@ -610,6 +612,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn per_signal_lua_keys_win_and_headers_merge() {
         isolate_env();
         let config = TelemetryConfig {
@@ -635,6 +638,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn generic_lua_keys_yield_to_a_signal_variable() {
         isolate_env();
         for env in [
@@ -674,6 +678,7 @@ mod tests {
 
     #[test_case(Signal::Metrics, Transport::Http(None); "own_endpoint_variable_drops_it")]
     #[test_case(Signal::Logs, Transport::Grpc; "other_signal_keeps_it")]
+    #[serial]
     fn generic_lua_protocol_with_a_signal_endpoint_variable(signal: Signal, expected: Transport) {
         isolate_env();
         unsafe { env::set_var(OTEL_EXPORTER_OTLP_METRICS_ENDPOINT, ENDPOINT) };
@@ -684,6 +689,7 @@ mod tests {
     /// The SDK reads either header variable, never both.
     #[test_case(Signal::Metrics, &[("authorization", "Bearer%20x")]; "merged_under_the_signal_variable")]
     #[test_case(Signal::Logs, &[]; "left_to_the_sdk")]
+    #[serial]
     fn generic_header_variable(signal: Signal, expected: &[(&str, &str)]) {
         isolate_env();
         unsafe {
@@ -734,6 +740,7 @@ mod tests {
     #[test_case(None, Some("Cumulative"), Temporality::Cumulative; "variable")]
     #[test_case(None, Some("sometimes"), Temporality::Delta; "invalid_variable_falls_back")]
     #[test_case(Some("lowmemory"), None, Temporality::LowMemory; "lua")]
+    #[serial]
     fn temporality_is(lua: Option<&str>, env: Option<&str>, expected: Temporality) {
         isolate_env();
         if let Some(env) = env {
@@ -750,6 +757,7 @@ mod tests {
     #[test_case(&[(OTEL_BLRP_SCHEDULE_DELAY, "500")], Ok(Some(500)); "standard_variable")]
     #[test_case(&[(ENV_LOGS_EXPORT_INTERVAL, "250"), (OTEL_BLRP_SCHEDULE_DELAY, "500")], Ok(Some(250)); "claude_code_variable_first")]
     #[test_case(&[(ENV_LOGS_EXPORT_INTERVAL, "0")], Err(ENV_LOGS_EXPORT_INTERVAL); "zero_is_rejected")]
+    #[serial]
     fn logs_interval(env: &[(&str, &str)], expected: Result<Option<u64>, &str>) {
         isolate_env();
         for (key, value) in env {
@@ -846,6 +854,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn rejects_a_zero_logs_interval() {
         isolate_env();
         let config = TelemetryConfig {
@@ -875,17 +884,17 @@ mod tests {
     /// The SDK and `batch_config` read the developer's shell, so its
     /// telemetry variables go first. Sound because nextest runs each test in
     /// its own process, before any other thread starts.
+    #[serial]
     fn isolate_env() {
         let keys_to_remove: Vec<_> = env::vars_os()
             .filter_map(|(key, _)| {
-                key.to_str()
-                    .and_then(|k| {
-                        if ENV_PREFIXES.iter().any(|prefix| k.starts_with(prefix)) {
-                            Some(k.to_string())
-                        } else {
-                            None
-                        }
-                    })
+                key.to_str().and_then(|k| {
+                    if ENV_PREFIXES.iter().any(|prefix| k.starts_with(prefix)) {
+                        Some(k.to_string())
+                    } else {
+                        None
+                    }
+                })
             })
             .collect();
         for key in keys_to_remove {
@@ -901,6 +910,7 @@ mod tests {
     #[test_case(OTLP, HTTP_PROTOBUF, "https://127.0.0.1:9"; "http_tls")]
     #[test_case(CONSOLE, GRPC, ""; "console")]
     #[tokio::test]
+    #[serial]
     async fn providers_build_for_every_exporter(exporter: &str, protocol: &str, endpoint: &str) {
         isolate_env();
         let config = TelemetryConfig {
