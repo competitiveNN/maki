@@ -441,7 +441,7 @@ impl Splash {
         let theme = theme::current();
         let bg = theme.background;
 
-        let total_width: u16 = HELP_SEGMENTS.iter().map(|(s, _)| s.len() as u16).sum();
+        let total_width: u16 = HELP_SEGMENTS.iter().map(|(s, _)| s.width() as u16).sum();
         let x_start = area.x + area.width.saturating_sub(total_width) / 2;
 
         let segments: Vec<_> = HELP_SEGMENTS
