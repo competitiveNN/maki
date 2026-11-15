@@ -999,6 +999,21 @@ impl<'t> EventLoop<'t> {
         for rt in &mut self.sessions {
             rt.app.checkpoint();
         }
+        // Periodically return freed heap memory to the OS.
+        #[cfg(unix)]
+        {
+            use std::sync::atomic::{AtomicU64, Ordering};
+            static LAST_TRIM: AtomicU64 = AtomicU64::new(0);
+            let now = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_secs();
+            let last = LAST_TRIM.load(Ordering::Relaxed);
+            if now - last >= 5 {
+                LAST_TRIM.store(now, Ordering::Relaxed);
+                unsafe { libc::malloc_trim(0); }
+            }
+        }
     }
 
     /// Only the focused session is drawn, so only it can owe a frame; focusing

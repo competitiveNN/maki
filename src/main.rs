@@ -34,8 +34,14 @@ impl Drop for ExitOnPanic {
     }
 }
 
-#[tokio::main]
+#[tokio::main(worker_threads = 4)]
 async fn main() {
+    // Limit glibc malloc arenas to reduce fragmentation/RSS bloat.
+    // Default allows 8x cores (160 on 20-core), each with 64MB virtual.
+    #[cfg(unix)]
+    unsafe {
+        libc::mallopt(libc::M_ARENA_MAX, 2);
+    }
     color_eyre::install().ok();
     let _exit = ExitOnPanic;
     let result = cmd::dispatch(Cli::parse()).await;
