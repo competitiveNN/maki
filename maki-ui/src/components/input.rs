@@ -2496,7 +2496,6 @@ mod tests {
                 Some(expected) => assert_eq!(expected, &row, "frame render drifted"),
                 None => first_row = Some(row),
             }
-        }
     }
 
     /// A narrow box with a wide CJK title must clip at grapheme boundaries
@@ -2566,5 +2565,44 @@ mod tests {
                 None => first_row = Some(row),
             }
         }
+        }
+    }
+
+    /// Regression: the default session title ("New session", all ASCII) must
+    /// render verbatim in the top-right border hint. It once came out as
+    /// "News session": the indicator glyph's cell accounting shifted the title
+    /// by one cell, so a border cell overlapped the title and read as an extra
+    /// character. The title must appear exactly, with no inserted or dropped
+    /// characters, whenever the box is wide enough to hold it.
+    #[test]
+    fn top_right_hint_default_title_renders_verbatim() {
+        let mut input = InputBox::new(InputHistory::default(), 20);
+        let border_style = Style::new().fg(theme::current().mode_build);
+        let width = 40_u16;
+        let height = 3_u16;
+        let backend = ratatui::backend::TestBackend::new(width, height);
+        let mut terminal = ratatui::Terminal::new(backend).unwrap();
+        let title = "New session";
+        let hint = Line::from(vec![
+            Span::styled(" \u{1f5a5} ", theme::current().input_placeholder),
+            Span::styled(format!("{title} "), theme::current().input_placeholder),
+        ]);
+        terminal
+            .draw(|frame| {
+                let area = Rect::new(0, 0, width, height);
+                let _ = input.view(frame, area, Placeholder::Blank, border_style, Some(hint));
+            })
+            .unwrap();
+        let row = top_border_row(terminal.backend().buffer());
+        assert!(!row.contains('\u{fffd}'), "garbled cell in {row:?}");
+        assert!(
+            row.contains(title),
+            "default title {title:?} missing or garbled in {row:?}"
+        );
+        assert!(
+            !row.contains("News session"),
+            "title came out as {:?} in {row:?}",
+            "News session"
+        );
     }
 }
