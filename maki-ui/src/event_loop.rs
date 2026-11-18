@@ -1057,7 +1057,9 @@ impl<'t> EventLoop<'t> {
             let last = LAST_TRIM.load(Ordering::Relaxed);
             if now - last >= 5 {
                 LAST_TRIM.store(now, Ordering::Relaxed);
-                unsafe { libc::malloc_trim(0); }
+                unsafe {
+                    libc::malloc_trim(0);
+                }
             }
         }
     }
@@ -1279,15 +1281,24 @@ impl<'t> EventLoop<'t> {
             UiAction::RunCommand {
                 cmdline,
                 depth,
+                session,
                 caller,
                 reply_tx,
             } => {
                 // Answer before dispatching: the caller only waits on the name
                 // resolving, and dispatch may take a while (or exit the app).
-                match self.focused_app().run_cmdline(&cmdline, depth, &caller) {
+                let idx = match self.resolve_session_index(session.as_deref()) {
+                    Ok(idx) => idx,
+                    Err(e) => {
+                        warn!(cmdline, depth, error = %e, "run_command refused");
+                        let _ = reply_tx.send(Err(e));
+                        return;
+                    }
+                };
+                match self.sessions[idx].app.run_cmdline(&cmdline, depth, &caller) {
                     Ok(actions) => {
                         let _ = reply_tx.send(Ok(()));
-                        self.dispatch(self.focused, actions);
+                        self.dispatch(idx, actions);
                     }
                     Err(e) => {
                         warn!(cmdline, depth, error = %e, "run_command refused");
@@ -1723,11 +1734,13 @@ impl<'t> EventLoop<'t> {
                 spec,
                 thinking,
                 fast,
+                session,
             } => {
+                let idx = self.resolve_session_index(session.as_deref())?;
                 if let Some(spec) = spec {
-                    self.change_model(&spec)?;
+                    self.change_model(idx, &spec)?;
                 }
-                let app = self.focused_app();
+                let app = &mut self.sessions[idx].app;
                 if let Some(thinking) = thinking {
                     app.set_thinking(&thinking)?;
                 }
@@ -2210,8 +2223,8 @@ impl<'t> EventLoop<'t> {
             Action::RestartAgent(history) => self.respawn_agent(idx, history, Respawn::Restart),
             Action::OpenFork(open) => self.open_fork(idx, *open),
             Action::ChangeModel(spec) => {
-                if let Err(e) = self.change_model(&spec) {
-                    self.focused_app().flash(e);
+                if let Err(e) = self.change_model(idx, &spec) {
+                    self.sessions[idx].app.flash(e);
                 }
             }
             Action::RefreshProvider { slug } => self.refresh_provider(slug),
@@ -2293,13 +2306,14 @@ impl<'t> EventLoop<'t> {
 
     /// The one explicit pick, which is why it alone writes the last-used file.
     /// Opening an old session must not change what the next `maki` starts on.
-    fn change_model(&mut self, spec: &str) -> Result<(), String> {
+    fn change_model(&mut self, idx: usize, spec: &str) -> Result<(), String> {
         let slot = self.slots.try_get(spec)?;
         let picked = slot.model.spec();
-        let idx = self.focused;
         self.apply_model(idx, slot);
         self.sessions[idx].app.record_recent_model(spec);
-        persist_model(&self.ctx.storage, &picked);
+        if idx == self.focused {
+            persist_model(&self.ctx.storage, &picked);
+        }
         Ok(())
     }
 
@@ -2367,7 +2381,7 @@ impl<'t> EventLoop<'t> {
             self.rebuild_models();
         } else if let Some(default_model) =
             maki_config::providers::builtin_provider(&slug).and_then(|b| b.default_model)
-            && let Err(e) = self.change_model(default_model)
+            && let Err(e) = self.change_model(self.focused, default_model)
         {
             self.focused_app().flash(e);
         }

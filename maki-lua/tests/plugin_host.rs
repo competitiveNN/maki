@@ -4700,6 +4700,7 @@ fn run_command_round_trips_through_ui(reply: Result<(), String>, expected_flash:
     let maki_lua::UiAction::RunCommand {
         cmdline,
         depth,
+        session: _,
         caller,
         reply_tx,
     } = wait_next(&mut rx, Duration::from_secs(5)).expect(RUN_COMMAND_NO_ACTION)

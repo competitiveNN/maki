@@ -1082,6 +1082,7 @@ fn register_command(
 /// lists what each one needs.
 ///
 /// @param cmdline string Command line, e.g. `"/new"` or `"/cd ~/src"`.
+/// @param opts table? Optional fields: `session` (string) target session id; defaults to the focused one.
 /// @return (boolean|nil, string|nil) `true` once dispatched, or nil and an error message for an unknown or denied command.
 /// @example
 /// -- /resume as an alias for the built-in session picker:
@@ -1101,12 +1102,15 @@ async fn run_command(
     #[ctx] tx: Option<UnboundedSender<UiAction>>,
     #[ctx] caller: PluginReach,
     cmdline: String,
+    opts: Option<Table>,
 ) -> LuaResult<Pair<bool>> {
+    let session: Option<String> = opts.as_ref().and_then(|t| t.opt("session").ok().flatten());
     let depth = Lineage::current(&lua).command_depth.saturating_add(1);
     let reply = try_pair!(
         ui_roundtrip(tx.as_ref(), |reply_tx| UiAction::RunCommand {
             cmdline,
             depth,
+            session,
             caller: caller.now(&lua),
             reply_tx,
         })

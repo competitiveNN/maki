@@ -232,14 +232,13 @@ pub fn get_pool(path: &Path) -> Result<DatabasePool, StorageError> {
         return Ok(entry.pool.clone());
     }
     // Evict least-recently-used if at capacity.
-    if reg.len() >= MAX_POOLS {
-        if let Some(lru_key) = reg
+    if reg.len() >= MAX_POOLS
+        && let Some(lru_key) = reg
             .iter()
             .min_by_key(|(_, e)| e.last_access)
             .map(|(k, _)| k.clone())
-        {
-            reg.remove(&lru_key);
-        }
+    {
+        reg.remove(&lru_key);
     }
     let pool = DatabasePool::new(path)?;
     reg.insert(

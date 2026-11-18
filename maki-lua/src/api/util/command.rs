@@ -524,7 +524,17 @@ pub enum ModelRequest {
         spec: Option<String>,
         thinking: Option<String>,
         fast: Option<bool>,
+        session: Option<String>,
     },
+}
+
+impl ModelRequest {
+    pub fn session(&self) -> Option<&str> {
+        match self {
+            Self::Set { session, .. } => session.as_deref(),
+            _ => None,
+        }
+    }
 }
 
 /// The plan surface `maki.plan` drives. Plan state is per session, so every
@@ -846,6 +856,8 @@ pub enum UiAction {
     RunCommand {
         cmdline: String,
         depth: u8,
+        /// Target session id; `None` means the focused session.
+        session: Option<String>,
         /// Checked on the UI side, since only the UI knows what each command
         /// can reach.
         caller: PluginReach,

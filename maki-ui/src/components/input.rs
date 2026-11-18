@@ -2496,61 +2496,24 @@ mod tests {
                 Some(expected) => assert_eq!(expected, &row, "frame render drifted"),
                 None => first_row = Some(row),
             }
-    }
+        }
 
-    /// A narrow box with a wide CJK title must clip at grapheme boundaries
-    /// and never emit U+FFFD. The title is wider than the box, so only the
-    /// rightmost graphemes that fit are visible.
-    #[test_case("session-\u{03c4}\u{03b5}\u{03c3}\u{03c4}-\u{1f600}-title " ; "greek_emoji")]
-    #[test_case("\u{1f5a5}session-\u{4e16}\u{754c}\u{1f600} " ; "cjk_emoji")]
-    #[test_case("\u{1f5a5}\u{1f468}\u{200d}\u{1f469}\u{200d}\u{1f467} " ; "zwj_family")]
-    fn top_right_hint_cjk_and_zwj_narrow_width(hint_title: &str) {
-        let mut input = InputBox::new(InputHistory::default(), 20);
-        let border_style = Style::new().fg(theme::current().mode_build);
-        let width = 20_u16;
-        let height = 3_u16;
-        let backend = ratatui::backend::TestBackend::new(width, height);
-        let mut terminal = ratatui::Terminal::new(backend).unwrap();
-        let hint = Line::from(vec![
-            Span::styled(" \u{1f5a5} ", theme::current().input_placeholder),
-            Span::styled(hint_title, theme::current().input_placeholder),
-        ]);
-        terminal
-            .draw(|frame| {
-                let area = Rect::new(0, 0, width, height);
-                let _ = input.view(frame, area, Placeholder::Blank, border_style, Some(hint));
-            })
-            .unwrap();
-        let buf = terminal.backend().buffer();
-        let row = top_border_row(buf);
-        assert!(!row.contains('\u{fffd}'), "garbled cell in {row:?}");
-        // At least one wide grapheme from the title survives in the visible slice.
-        assert!(
-            row.contains('\u{4e16}')
-                || row.contains('\u{754c}')
-                || row.contains('\u{1f600}')
-                || row.contains('\u{1f468}')
-                || row.contains('\u{1f469}')
-                || row.contains('\u{1f467}'),
-            "title missing from {row:?}"
-        );
-    }
-
-    /// Repeated frames with a CJK/ZWJ title must stay stable and garble-free.
-    #[test_case("\u{4e16}\u{754c}\u{1f600}" ; "cjk_emoji")]
-    #[test_case("\u{1f468}\u{200d}\u{1f469}\u{200d}\u{1f467}" ; "zwj_family")]
-    fn top_right_hint_cjk_zwj_repeated_frames(title: &str) {
-        let mut input = InputBox::new(InputHistory::default(), 20);
-        let border_style = Style::new().fg(theme::current().mode_build);
-        let width = 30_u16;
-        let height = 3_u16;
-        let mut first_row: Option<String> = None;
-        for _ in 0..5 {
+        /// A narrow box with a wide CJK title must clip at grapheme boundaries
+        /// and never emit U+FFFD. The title is wider than the box, so only the
+        /// rightmost graphemes that fit are visible.
+        #[test_case("session-\u{03c4}\u{03b5}\u{03c3}\u{03c4}-\u{1f600}-title " ; "greek_emoji")]
+        #[test_case("\u{1f5a5}session-\u{4e16}\u{754c}\u{1f600} " ; "cjk_emoji")]
+        #[test_case("\u{1f5a5}\u{1f468}\u{200d}\u{1f469}\u{200d}\u{1f467} " ; "zwj_family")]
+        fn top_right_hint_cjk_and_zwj_narrow_width(hint_title: &str) {
+            let mut input = InputBox::new(InputHistory::default(), 20);
+            let border_style = Style::new().fg(theme::current().mode_build);
+            let width = 20_u16;
+            let height = 3_u16;
             let backend = ratatui::backend::TestBackend::new(width, height);
             let mut terminal = ratatui::Terminal::new(backend).unwrap();
             let hint = Line::from(vec![
                 Span::styled(" \u{1f5a5} ", theme::current().input_placeholder),
-                Span::styled(format!("{title} "), theme::current().input_placeholder),
+                Span::styled(hint_title, theme::current().input_placeholder),
             ]);
             terminal
                 .draw(|frame| {
@@ -2558,13 +2521,51 @@ mod tests {
                     let _ = input.view(frame, area, Placeholder::Blank, border_style, Some(hint));
                 })
                 .unwrap();
-            let row = top_border_row(terminal.backend().buffer());
+            let buf = terminal.backend().buffer();
+            let row = top_border_row(buf);
             assert!(!row.contains('\u{fffd}'), "garbled cell in {row:?}");
-            match &first_row {
-                Some(expected) => assert_eq!(expected, &row, "frame render drifted"),
-                None => first_row = Some(row),
-            }
+            // At least one wide grapheme from the title survives in the visible slice.
+            assert!(
+                row.contains('\u{4e16}')
+                    || row.contains('\u{754c}')
+                    || row.contains('\u{1f600}')
+                    || row.contains('\u{1f468}')
+                    || row.contains('\u{1f469}')
+                    || row.contains('\u{1f467}'),
+                "title missing from {row:?}"
+            );
         }
+
+        /// Repeated frames with a CJK/ZWJ title must stay stable and garble-free.
+        #[test_case("\u{4e16}\u{754c}\u{1f600}" ; "cjk_emoji")]
+        #[test_case("\u{1f468}\u{200d}\u{1f469}\u{200d}\u{1f467}" ; "zwj_family")]
+        fn top_right_hint_cjk_zwj_repeated_frames(title: &str) {
+            let mut input = InputBox::new(InputHistory::default(), 20);
+            let border_style = Style::new().fg(theme::current().mode_build);
+            let width = 30_u16;
+            let height = 3_u16;
+            let mut first_row: Option<String> = None;
+            for _ in 0..5 {
+                let backend = ratatui::backend::TestBackend::new(width, height);
+                let mut terminal = ratatui::Terminal::new(backend).unwrap();
+                let hint = Line::from(vec![
+                    Span::styled(" \u{1f5a5} ", theme::current().input_placeholder),
+                    Span::styled(format!("{title} "), theme::current().input_placeholder),
+                ]);
+                terminal
+                    .draw(|frame| {
+                        let area = Rect::new(0, 0, width, height);
+                        let _ =
+                            input.view(frame, area, Placeholder::Blank, border_style, Some(hint));
+                    })
+                    .unwrap();
+                let row = top_border_row(terminal.backend().buffer());
+                assert!(!row.contains('\u{fffd}'), "garbled cell in {row:?}");
+                match &first_row {
+                    Some(expected) => assert_eq!(expected, &row, "frame render drifted"),
+                    None => first_row = Some(row),
+                }
+            }
         }
     }
 

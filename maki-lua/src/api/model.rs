@@ -207,6 +207,7 @@ async fn available(
 ///   `thinking` (string|number) `"off"`, `"adaptive"`, an effort level
 ///   (`"minimal"` to `"max"`), a token budget, or `""` to toggle it on and off;
 ///   `fast` (boolean) Anthropic fast mode.
+///   `session` (string) target session id; defaults to the focused one.
 /// @return (table|nil, string|nil) The new state, or nil and an error.
 /// @example
 /// maki.model.set("anthropic/claude-opus-4-6")
@@ -223,11 +224,13 @@ async fn set(
             spec: Some(spec.to_str()?.to_owned()),
             thinking: None,
             fast: None,
+            session: None,
         },
         Value::Table(opts) => ModelRequest::Set {
             spec: opts.opt("spec")?,
             thinking: opts.opt("thinking")?,
             fast: opts.opt("fast")?,
+            session: opts.opt("session")?,
         },
         other => {
             return Err(LuaError::runtime(format!(
@@ -322,7 +325,8 @@ mod tests {
                 spec,
                 thinking,
                 fast,
-            } => json!({ "spec": spec, "thinking": thinking, "fast": fast }),
+                session,
+            } => json!({ "spec": spec, "thinking": thinking, "fast": fast, "session": session }),
         }))
     }
 
