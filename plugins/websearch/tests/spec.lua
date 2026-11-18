@@ -127,13 +127,16 @@ case("providers_carry_what_init_consumes", function()
   for name, p in pairs(providers) do
     assert(type(p.label) == "string", name .. " is missing label")
     assert(type(p.env) == "string", name .. " is missing env")
-    if p.transport ~= nil then
-      eq(p.transport, "get", name .. " has an unknown transport")
+    if p.transport == "rest" then
+      assert(type(p.search) == "function", name .. " is missing search")
+    elseif p.transport == "get" then
+      -- searxng backend
     else
       for _, field in ipairs({ "endpoint", "auth_header", "tool" }) do
         assert(type(p[field]) == "string", name .. " is missing " .. field)
       end
-      eq(p.arguments(QUERY, 5).query, QUERY, name .. " must pass the query through")
+      local args = p.arguments(QUERY, 5)
+    assert(args.query == QUERY or args.objective == QUERY, name .. " must pass the query through")
     end
   end
 end)

@@ -15,7 +15,7 @@ local opts = maki.api.register_options(output_limits.extend({
   provider = {
     default = "exa",
     type = "string",
-    desc = 'Search backend: "exa" (default), "youcom" (You.com MCP), "kagi" (Kagi MCP, needs KAGI_API_KEY), or "searxng" (self-hosted).',
+    desc = 'Search backend: "exa", "tinyfish", "jina", "tavily", "firecrawl", "parallel", "youcom", "kagi", or "searxng".',
   },
   searxng_base_url = {
     default = "",
@@ -200,7 +200,9 @@ maki.api.register_tool({
     local num_results = math.max(1, input.num_results or DEFAULT_NUM_RESULTS)
 
     local text, err
-    if provider.transport == "get" then
+    if type(provider.search) == "function" then
+      text, err = provider.search(query, num_results, input.time_range)
+    elseif provider.transport == "get" then
       text, err = search_searxng(query, num_results, input.time_range)
     else
       text, err = search_mcp(query, num_results)
