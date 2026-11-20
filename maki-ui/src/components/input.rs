@@ -365,17 +365,14 @@ impl InputBox {
 
     /// A recall opens the command palette on a `/` text with nobody holding
     /// it to the plugins that wrote it, and the palette matches loosely, so
-    /// a `/yol` a plugin wrote would come back as the user's `/yolo`. Such a
-    /// text stays out of history.
+    /// a `/yol` a plugin wrote would come back as the user's `/yolo`.
     pub fn submit(&mut self) -> Option<Submission> {
         let text = sent_text(self.buffer.value()).to_string();
         let images = mem::take(&mut self.pending_images);
         if text.is_empty() && images.is_empty() {
             return None;
         }
-        if !(text.starts_with(COMMAND_PREFIX) && !self.buffer.writers().is_empty()) {
-            self.history.push(text.clone());
-        }
+        self.history.push(text.clone());
         self.discard();
         Some(Submission { text, images })
     }
