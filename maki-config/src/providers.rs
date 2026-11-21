@@ -256,7 +256,7 @@ static REGISTERED: LazyLock<ArcSwap<Vec<&'static BuiltInProvider>>> =
 
 /// Clears the runtime-registered providers. Only for tests.
 pub fn clear_registered_providers() {
-    *REGISTERED.write().unwrap_or_else(|e| e.into_inner()) = Vec::new();
+    REGISTERED.store(std::sync::Arc::new(Vec::new()));
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
