@@ -7191,48 +7191,68 @@ fn job_callbacks_fire_while_command_handler_parked() {
     assert!(matches!(action, maki_lua::UiAction::Flash(msg) if msg == "job:hi"));
 }
 
-/// read tool requires offset and limit; missing fields should fail schema validation.
-mod read_tool_required_params {
+/// read tool defaults offset and limit when omitted; missing fields should succeed with defaults.
+mod read_tool_optional_params {
     use super::*;
 
-    const MISSING_OFFSET_ERR: &str = "invalid parameter 'offset': required";
-    const MISSING_LIMIT_ERR: &str = "invalid parameter 'limit': required";
     const MAX_OUTPUT_LINES: i32 = 2000;
 
     #[test]
-    fn missing_offset_fails_parse() {
+    fn missing_offset_defaults_to_one() {
         let (reg, _host) = builtins_host();
-        let entry = reg.get("read").expect("read registered");
-        let err = entry
-            .tool
-            .parse(&serde_json::json!({ "path": "/tmp/foo.txt", "limit": 10 }))
-            .err()
-            .expect("missing offset should fail");
-        assert!(err.to_string().contains(MISSING_OFFSET_ERR), "got: {err}");
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("foo.txt");
+        std::fs::write(&path, "line 1\nline 2\nline 3").unwrap();
+
+        let out = exec_tool(
+            &reg,
+            "read",
+            serde_json::json!({
+                "path": path.to_str().unwrap(),
+                "limit": 2
+            }),
+        );
+        let out = out.expect("read should succeed");
+        assert!(out.contains("1: line 1"), "got: {out}");
     }
 
     #[test]
-    fn missing_limit_fails_parse() {
+    fn missing_limit_defaults_to_zero() {
         let (reg, _host) = builtins_host();
-        let entry = reg.get("read").expect("read registered");
-        let err = entry
-            .tool
-            .parse(&serde_json::json!({ "path": "/tmp/foo.txt", "offset": 1 }))
-            .err()
-            .expect("missing limit should fail");
-        assert!(err.to_string().contains(MISSING_LIMIT_ERR), "got: {err}");
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("foo.txt");
+        std::fs::write(&path, "line 1\nline 2\nline 3").unwrap();
+
+        let out = exec_tool(
+            &reg,
+            "read",
+            serde_json::json!({
+                "path": path.to_str().unwrap(),
+                "offset": 2
+            }),
+        );
+        let out = out.expect("read should succeed");
+        assert!(out.contains("2: line 2"), "got: {out}");
+        assert!(out.contains("3: line 3"), "got: {out}");
     }
 
     #[test]
-    fn both_offset_and_limit_present_parses() {
+    fn missing_both_defaults_to_offset_one_limit_zero() {
         let (reg, _host) = builtins_host();
-        let entry = reg.get("read").expect("read registered");
-        let result = entry.tool.parse(&serde_json::json!({
-            "path": "/tmp/foo.txt",
-            "offset": 1,
-            "limit": 10
-        }));
-        assert!(result.is_ok(), "valid input should parse");
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("foo.txt");
+        std::fs::write(&path, "line 1\nline 2\nline 3").unwrap();
+
+        let out = exec_tool(
+            &reg,
+            "read",
+            serde_json::json!({
+                "path": path.to_str().unwrap()
+            }),
+        );
+        let out = out.expect("read should succeed");
+        assert!(out.contains("1: line 1"), "got: {out}");
+        assert!(out.contains("3: line 3"), "got: {out}");
     }
 
     #[test]

@@ -7,7 +7,7 @@ local HIGHLIGHT_CONTEXT_LINES = 200
 local DESCRIPTION = [[Read a file. Returns contents with line numbers (1-indexed).
 
 - Supports absolute, relative, and ~/ paths.
-- **offset** and **limit** are required. Use offset=1 to read from the first line.
+- **offset** and **limit** are optional. Defaults: offset=1 (first line), limit=0 (read to end, capped at 2000 lines).
 - Use limit=0 to read until the end of file (capped at 2000 lines).
 - Use the **index** tool or **grep** tool first to find the offset and limit.
 - Only read the sections you actually need.
@@ -182,12 +182,12 @@ maki.api.register_tool({
       offset = {
         type = "integer",
         description = "Line number to start from (1-indexed). Use 1 for the first line.",
-        required = true,
+        required = false,
       },
       limit = {
         type = "integer",
         description = "Max number of lines to read. Use 0 to read until end of file (capped at 2000 lines).",
-        required = true,
+        required = false,
       },
     },
   },
@@ -249,6 +249,8 @@ maki.api.register_tool({
     if meta.is_dir then
       return { llm_output = "error: path is a directory, use the list tool instead", is_error = true }
     end
-    return read_file(path, input.offset, input.limit, ctx)
+    local offset = input.offset or 1
+    local limit = input.limit or 0
+    return read_file(path, offset, limit, ctx)
   end,
 })
