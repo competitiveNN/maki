@@ -77,7 +77,6 @@ rust-version = "1.99"
 [workspace.lints.clippy]
 
 [workspace.dependencies]
-mimalloc = { version = "0.1.52", default-features = false }
 maki-agent = { path = "maki-agent" }
 maki-acp = { path = "maki-acp" }
 maki-config = { path = "maki-config" }
