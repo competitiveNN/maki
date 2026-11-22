@@ -136,9 +136,12 @@ local function normalize_entry(entry)
   local params
   if nested == nil then
     if not has_rest then
-      return nil, "batch entry missing 'parameters'"
+      -- Default to empty parameters so a tool with all-optional params
+      -- (or sensible defaults) can still run when the model omits them.
+      params = {}
+    else
+      params = rest
     end
-    params = rest
   elseif not has_rest then
     params = nested
   elseif type(nested) ~= "table" then
@@ -226,13 +229,17 @@ local function prepare_children(tool_calls)
   for i, entry in ipairs(tool_calls) do
     local c, err = normalize_entry(entry)
     if not c then
-      return nil, err
+      -- A malformed entry no longer fails the whole batch; mark it as an
+      -- error child so the rest still run.
+      c = { tool = "unknown", params = {}, status = STATUS.ERROR, output = err or "invalid entry" }
     end
-    c.status = STATUS.PENDING
+    c.status = c.status or STATUS.PENDING
     if i > MAX_BATCH_SIZE then
       c.status, c.output = STATUS.ERROR, DISCARDED_ERROR
     elseif c.tool == "batch" then
       c.status, c.output = STATUS.ERROR, NESTED_ERROR
+    elseif c.tool == "unknown" then
+      -- keep the normalize error
     end
     c.header = header_spans(c.tool, c.params)
     children[i] = c
