@@ -1045,8 +1045,8 @@ impl<'t> EventLoop<'t> {
         for rt in &mut self.sessions {
             rt.app.checkpoint();
         }
-        // Periodically return freed heap memory to the OS.
-        #[cfg(unix)]
+        // Periodically return freed heap memory to the OS (glibc only).
+        #[cfg(all(unix, target_env = "gnu"))]
         {
             use std::sync::atomic::{AtomicU64, Ordering};
             static LAST_TRIM: AtomicU64 = AtomicU64::new(0);

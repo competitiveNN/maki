@@ -38,7 +38,7 @@ impl Drop for ExitOnPanic {
 async fn main() {
     // Limit glibc malloc arenas to reduce fragmentation/RSS bloat.
     // Default allows 8x cores (160 on 20-core), each with 64MB virtual.
-    #[cfg(unix)]
+    #[cfg(all(unix, target_env = "gnu"))]
     unsafe {
         libc::mallopt(libc::M_ARENA_MAX, 2);
     }
