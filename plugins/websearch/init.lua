@@ -17,10 +17,15 @@ local opts = maki.api.register_options(output_limits.extend({
     type = "string",
     desc = 'Search backend: "exa", "tinyfish", "jina", "tavily", "firecrawl", "parallel", "youcom", "kagi", or "searxng".',
   },
-  searxng_base_url = {
-    default = "",
+  enabled_providers = {
+    default = "exa",
     type = "string",
-    desc = "SearXNG instance URL; falls back to the `SEARXNG_BASE_URL` env var. A LAN instance also needs its host in `net.allowed_private_hosts`. Only this backend accepts websearch's `time_range` (day, week, month, or year); its `num_results` is capped by the instance page size.",
+    desc = 'Comma-separated providers to enable for multisearch (e.g. "exa,kagi,tavily"). A single provider like "exa" runs only that backend. Defaults to the value of `provider`.',
+  },
+  searxng_base_url = {
+    default = "https://searx.be",
+    type = "string",
+    desc = "SearXNG instance URL; defaults to `https://searx.be` (falls back to the `SEARXNG_BASE_URL` env var). A LAN instance also needs its host in `net.allowed_private_hosts`. Only this backend accepts websearch's `time_range` (day, week, month, or year); its `num_results` is capped by the instance page size.",
   },
   max_response_bytes = {
     default = 5 * 1024 * 1024,
@@ -91,6 +96,19 @@ local function search_mcp(query, num_results)
   local key = api_key()
   if not key and provider.key_required then
     return nil, provider.label .. " search needs " .. provider.env .. " to be set"
+  end
+  if not key then
+    local missing = {
+      EXA_API_KEY = true,
+      FIRECRAWL_API_KEY = true,
+      JINA_API_KEY = true,
+      PARALLEL_API_KEY = true,
+      TAVILY_API_KEY = true,
+      TINYFISH_API_KEY = true,
+    }
+    if missing[provider.env] then
+      return nil, provider.label .. " search needs " .. provider.env .. " to be set"
+    end
   end
   local headers = {
     ["Content-Type"] = "application/json",
@@ -199,22 +217,68 @@ maki.api.register_tool({
 
     local num_results = math.max(1, input.num_results or DEFAULT_NUM_RESULTS)
 
-    local text, err
-    if type(provider.search) == "function" then
-      text, err = provider.search(query, num_results, input.time_range)
-    elseif provider.transport == "get" then
-      text, err = search_searxng(query, num_results, input.time_range)
-    else
-      text, err = search_mcp(query, num_results)
+    -- Normalise enabled_providers: comma-separated string -> {string}, nil -> {provider}
+    local enabled = opts.enabled_providers
+    if type(enabled) ~= "string" or enabled == "" then
+      enabled = opts.provider
     end
-    if not text then
-      return { llm_output = "error: " .. tostring(err), is_error = true }
+    local enabled_list = {}
+    for name in string.gmatch(enabled, "[^,]+") do
+      table.insert(enabled_list, name:match("^%s*(.-)%s*$"))
     end
+
+    -- Build a list of (provider_name, search_func) pairs to fan out to
+    local providers_to_search = {}
+    for pname, pdata in pairs(providers) do
+      local ok = false
+      for _, en in ipairs(enabled_list) do
+        if pname == en then ok = true end
+      end
+      if ok then
+        table.insert(providers_to_search, { name = pname, data = pdata })
+      end
+    end
+
+    if #providers_to_search == 0 then
+      return { llm_output = "error: no enabled providers found in enabled_providers config", is_error = true }
+    end
+
+    -- Run each provider's search and collect results
+    local all_results = {}
+    local errors = {}
+    for _, p in ipairs(providers_to_search) do
+      local text, err
+      if type(p.data.search) == "function" then
+        text, err = p.data.search(query, num_results, input.time_range)
+      elseif p.data.transport == "get" then
+        text, err = search_searxng(query, num_results, input.time_range)
+      else
+        text, err = search_mcp(query, num_results)
+      end
+      if text then
+        -- Prepend provider name so the model can distinguish results
+        local header = string.format("%s results:", p.data.label)
+        table.insert(all_results, header .. "\n" .. text)
+      else
+        if err then table.insert(errors, tostring(err)) end
+      end
+      -- If a provider fails, just skip it (model sees partial results)
+    end
+
+    if #all_results == 0 then
+      if #errors > 0 then
+        return { llm_output = "error: " .. errors[1], is_error = true }
+      end
+      return { llm_output = "error: no search results from any enabled provider", is_error = true }
+    end
+
+    -- Concatenate all provider results; the model can read them as separate result sets
+    local combined = table.concat(all_results, "\n\n")
 
     local max_lines, max_bytes = output_limits.resolve(opts, ctx)
     return {
-      llm_output = truncate(text, max_lines, max_bytes),
-      body = ToolView.restore(text, web_view_opts(ctx)),
+      llm_output = truncate(combined, max_lines, max_bytes),
+      body = ToolView.restore(combined, web_view_opts(ctx)),
     }
   end,
 })

@@ -388,8 +388,9 @@ maki.setup({
 | `max_output_bytes` | integer | - | - | Override `agent.max_output_bytes` for this tool. |
 | `max_output_lines` | integer | - | - | Override `agent.max_output_lines` for this tool. |
 | `max_response_bytes` | integer | `5242880` | 1024 | Stop reading a response after this many bytes, at most 64 MiB. |
-| `provider` | string | `"exa"` | - | Search backend: "exa" (default), "youcom" (You.com MCP), "kagi" (Kagi MCP, needs KAGI_API_KEY), or "searxng" (self-hosted). |
-| `searxng_base_url` | string | `""` | - | SearXNG instance URL; falls back to the `SEARXNG_BASE_URL` env var. A LAN instance also needs its host in `net.allowed_private_hosts`. Only this backend accepts websearch's `time_range` (day, week, month, or year); its `num_results` is capped by the instance page size. |
+| `provider` | string | `"exa"` | - | Search backend: "exa", "tinyfish", "jina", "tavily", "firecrawl", "parallel", "youcom", "kagi", or "searxng". |
+| `enabled_providers` | string | `"exa"` | - | Comma-separated providers to enable for multisearch (e.g. "exa,kagi,tavily"). A single provider like "exa" runs only that backend. Defaults to the value of `provider`. |
+| `searxng_base_url` | string | `"https://searx.be"` | - | SearXNG instance URL; defaults to `https://searx.be` (falls back to the `SEARXNG_BASE_URL` env var). A LAN instance also needs its host in `net.allowed_private_hosts`. Only this backend accepts websearch's `time_range` (day, week, month, or year); its `num_results` is capped by the instance page size. |
 
 ## Validation
 
