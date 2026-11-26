@@ -70,29 +70,30 @@ local INDICATOR = {
 }
 
 local description = string.format(
-  [[Executes multiple independent tool calls concurrently to reduce round-trips.
+  [[Runs several independent tool calls in parallel within a single batch, reducing round-trips.
 
-ALWAYS USE THE BATCH TOOL WHEN YOU HAVE MULTIPLE INDEPENDENT TOOL CALLS. This dramatically improves performance.
+Each entry names a registered tool and its arguments. The calls execute concurrently and their results come back in the same order as the entries. A failure in one call does not stop the others; every result is reported individually so you can match each output to its call.
 
-Rules:
-- 1-%d tool calls per batch
-- All calls run in parallel; order NOT guaranteed
-- Partial failures do not stop other calls
-- Do NOT nest batch inside batch
-- Do NOT use for dependent operations or when filtering results (use code_execution)]],
+Use this for independent calls only, such as reading several files at once. Do not use it for dependent calls where one call needs another call's output, and do not nest batch inside batch.
+
+Limits: at most %d tool calls per batch. Unregistered or malformed calls are reported as errors without failing the rest of the batch.]],
   MAX_BATCH_SIZE
 )
 
 local schema = {
   type = "object",
+  required = { "tool_calls" },
+  additionalProperties = false,
   properties = {
     tool_calls = {
       type = "array",
-      description = "Array of tool calls to execute in parallel",
-      required = true,
+      description = "The tool calls to run in parallel. Each entry names a registered tool and supplies its arguments.",
+      minItems = 1,
+      maxItems = MAX_BATCH_SIZE,
       items = {
         type = "object",
-        description = "Tool invocation: { tool: string, parameters: object } or flat { tool: string, ...params }",
+        required = { "tool" },
+        description = "One tool invocation. Provide either a nested 'parameters' object or the tool's parameters as flat sibling fields, but not both.",
       },
     },
   },
@@ -124,6 +125,9 @@ local function normalize_entry(entry)
   -- Lua twin of `canonical_tool_name` (streaming.rs): strip GPT's
   -- `functions.` prefix so headers and the nested-batch guard match.
   tool = tool:match("^functions%.(.+)") or tool
+  if tool == "" then
+    return nil, "batch entry missing 'tool'"
+  end
   local rest = {}
   local has_rest = false
   for k, v in pairs(entry) do
@@ -143,6 +147,9 @@ local function normalize_entry(entry)
       params = rest
     end
   elseif not has_rest then
+    if type(nested) ~= "table" then
+      return nil, "'parameters' must be an object"
+    end
     params = nested
   elseif type(nested) ~= "table" then
     return nil, "'parameters' must be an object when flat fields are also present"
@@ -158,6 +165,13 @@ local function normalize_entry(entry)
   return { tool = tool, params = params }
 end
 
+-- Look up a registered tool, never raising. A briefly-unavailable registry
+-- (mid-reload) degrades to nil so callers fall back to the plain tool name.
+local function safe_get_tool(tool)
+  local ok, t = pcall(maki.api.get_tool, tool)
+  return ok and t or nil
+end
+
 -- Whether {params} asks {tool} to run in the background. Only a tool that
 -- offers that input counts, since another tool may use `background` for
 -- something else.
@@ -165,7 +179,7 @@ local function wants_background(tool, params)
   if params[BACKGROUND_PARAM] ~= true then
     return false
   end
-  local t = maki.api.get_tool(tool)
+  local t = safe_get_tool(tool)
   return t ~= nil and table.find(t.background_params or {}, BACKGROUND_PARAM) ~= nil
 end
 
@@ -174,7 +188,7 @@ end
 -- Let the child tool draw its own header. A tool with none, or a broken
 -- one, comes back nil; either way the plain tool name is enough.
 local function header_spans(tool, params)
-  local t = maki.api.get_tool(tool)
+  local t = safe_get_tool(tool)
   local spans = t and t.header and t.header(params)
   return spans or { { tool, "tool" } }
 end
@@ -202,7 +216,7 @@ end
 local function child_body_buf(c, cctx)
   local output = c.output or ""
   local is_error = c.status == STATUS.ERROR
-  local t = maki.api.get_tool(c.tool)
+  local t = safe_get_tool(c.tool)
   if t and t.restore then
     local ok, buf = pcall(t.restore, c.params, output, is_error, cctx)
     if ok and buf then
@@ -519,9 +533,13 @@ function Batch:run_child(c, ctx)
   if TERMINAL[c.status] then
     return
   end
+  -- Defensive: wrap dispatch in pcall so a Lua error from call_tool (e.g.
+  -- non-serializable parameters) cannot leave a child stuck in RUNNING and
+  -- later misreported as "cancelled". Unregistered tools surface through
+  -- call_tool's returned error instead.
   c.status = STATUS.RUNNING
   self:rerender()
-  local text, err, format = maki.agent.call_tool(ctx, c.tool, c.params, {
+  local ok, text, err, format = pcall(maki.agent.call_tool, ctx, c.tool, c.params, {
     output_mode = ctx:output_mode(),
     -- Clicks on a still-streaming child are a no-op: its click handler
     -- lives on the child's own handle, not on this wrapper buf.
@@ -546,6 +564,17 @@ function Batch:run_child(c, ctx)
       self:publish_parts()
     end,
   })
+  if not ok then
+    local e = tostring(text or "call failed")
+    -- If the error is a cancellation, do NOT settle here. Let the sweep
+    -- handle it so the child gets the standard "cancelled" reason and
+    -- the batch cancels cleanly.
+    if e:find("cancelled", 1, true) or e:find("interrupted", 1, true) then
+      return
+    end
+    self:settle(c, STATUS.ERROR, e)
+    return
+  end
   -- The sweep may have settled this child mid-call, and the call knows
   -- nothing about that, so its result is moot. Unless it came back with
   -- more than the sweep's bare reason: that partial output is worth
